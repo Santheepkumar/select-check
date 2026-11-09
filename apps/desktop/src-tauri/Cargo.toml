@@ -1,0 +1,24 @@
+[package]
+name = "select-check-desktop"
+version = "0.1.0"
+description = "SelectCheck — Cross-platform floating grammar & rewrite assistant"
+authors = ["SelectCheck"]
+edition = "2021"
+
+[lib]
+name = "select_check_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.0.0", features = [] }
+
+[dependencies]
+tauri = { version = "2.1.0", features = ["tray-icon", "macos-private-api"] }
+tauri-plugin-shell = "2.0.0"
+tauri-plugin-global-shortcut = "2.0.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+rdev = "0.5.3"
+arboard = "3.4.1"
+enigo = "0.2.1"
+active-win-pos-rs = "0.8.4"

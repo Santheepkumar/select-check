@@ -1,0 +1,54 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "SelectCheck",
+  "version": "0.1.0",
+  "identifier": "com.selectcheck.desktop",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "macOSPrivateApi": true,
+    "windows": [
+      {
+        "label": "overlay",
+        "title": "SelectCheck Overlay",
+        "url": "index.html?window=overlay",
+        "width": 44,
+        "height": 44,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false,
+        "resizable": false,
+        "focus": false
+      },
+      {
+        "label": "settings",
+        "title": "SelectCheck Settings",
+        "url": "index.html?window=settings",
+        "width": 620,
+        "height": 680,
+        "resizable": true,
+        "visible": false,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  }
+}
