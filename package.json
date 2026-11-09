@@ -1,0 +1,18 @@
+{
+  "name": "select-check-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SelectCheck — Cross-platform floating grammar & rewrite assistant (Tauri v2 + Cloudflare Workers Hono)",
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "dev:api": "pnpm --filter @select-check/api dev",
+    "dev:desktop": "pnpm --filter @select-check/desktop dev",
+    "tauri:dev": "pnpm --filter @select-check/desktop tauri dev",
+    "tauri:build": "pnpm --filter @select-check/desktop tauri build"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  }
+}
