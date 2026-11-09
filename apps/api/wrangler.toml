@@ -1,0 +1,24 @@
+name = "select-check-api"
+main = "src/index.ts"
+compatibility_date = "2025-03-01"
+
+[vars]
+OPENAI_MODEL = "gpt-4o-mini"
+FREE_DAILY_LIMIT = "10"
+AUTH_DAILY_LIMIT = "100"
+
+[[kv_namespaces]]
+binding = "QUOTA_KV"
+id = "replace-with-cloudflare-kv-id"
+preview_id = "replace-with-cloudflare-kv-preview-id"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "select-check-db"
+database_id = "replace-with-cloudflare-d1-id"
+
+# Secrets to configure via `wrangler secret put`:
+# - OPENAI_API_KEY
+# - JWT_SECRET
+# - SUPABASE_URL (optional if using Supabase Auth)
+# - SUPABASE_ANON_KEY (optional if using Supabase Auth)

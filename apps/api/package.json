@@ -1,0 +1,26 @@
+{
+  "name": "@select-check/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/dev-server.ts",
+    "dev:wrangler": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "build": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@select-check/shared": "workspace:*",
+    "hono": "^4.7.4"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250310.0",
+    "@hono/node-server": "^1.13.8",
+    "@types/node": "^22.13.9",
+    "tsx": "^4.19.3",
+    "typescript": "^5.7.2",
+    "vitest": "^3.0.7",
+    "wrangler": "^3.112.0"
+  }
+}
