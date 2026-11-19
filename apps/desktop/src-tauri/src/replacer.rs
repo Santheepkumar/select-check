@@ -2,7 +2,7 @@ use arboard::Clipboard;
 use enigo::{Direction, Enigo, Key, Keyboard, Settings as EnigoSettings};
 use std::thread;
 use std::time::Duration;
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 
 use crate::overlay::dismiss_overlay_window;
 
@@ -13,34 +13,46 @@ pub fn replace_selected_text(app: AppHandle, text: String) -> Result<(), String>
     dismiss_overlay_window(&app)?;
 
     // Give the window manager a brief moment to return focus to the active editor
-    thread::sleep(Duration::from_millis(65));
+    thread::sleep(Duration::from_millis(60));
 
+    // 2. Open system clipboard and backup current user content
     let mut clipboard = Clipboard::new().map_err(|e| format!("Clipboard error: {e}"))?;
-    let original_clipboard = clipboard.get_text().ok();
+    let previous_clipboard = clipboard.get_text().ok();
 
-    // 2. Write replacement text to clipboard
+    // 3. Write selected suggestion to system clipboard
     clipboard
         .set_text(text)
-        .map_err(|e| format!("Failed to set clipboard text: {e}"))?;
+        .map_err(|e| format!("Failed to set replacement clipboard text: {e}"))?;
 
-    // 3. Synthesize Paste (Cmd+V on macOS, Ctrl+V on Windows/Linux)
+    // 4. Synthesize Command+V (macOS) or Ctrl+V (Windows/Linux) via enigo
     let mut enigo =
-        Enigo::new(&EnigoSettings::default()).map_err(|e| format!("Input synth error: {e}"))?;
+        Enigo::new(&EnigoSettings::default()).map_err(|e| format!("Enigo init error: {e:?}"))?;
 
     #[cfg(target_os = "macos")]
-    let modifier = Key::Meta;
+    let modifier_key = Key::Meta;
     #[cfg(not(target_os = "macos"))]
-    let modifier = Key::Control;
+    let modifier_key = Key::Control;
 
-    let _ = enigo.key(modifier, Direction::Press);
-    let _ = enigo.key(Key::Unicode('v'), Direction::Click);
-    let _ = enigo.key(modifier, Direction::Release);
+    // On macOS, Key::Unicode('v') triggers Carbon TSM layout resolution which crashes
+    // background threads. Key::Other(9) directly uses raw virtual keycode kVK_ANSI_V (9).
+    #[cfg(target_os = "macos")]
+    let v_key = Key::Other(9);
+    #[cfg(not(target_os = "macos"))]
+    let v_key = Key::Unicode('v');
 
-    // 4. Wait briefly for the target app to process the paste, then restore the user's original clipboard
-    thread::sleep(Duration::from_millis(90));
-    if let Some(prev) = original_clipboard {
-        let _ = clipboard.set_text(prev);
-    }
+    let _ = enigo.key(modifier_key, Direction::Press);
+    let _ = enigo.key(v_key, Direction::Click);
+    let _ = enigo.key(modifier_key, Direction::Release);
+
+    // 5. Restore original clipboard content in background after paste completes
+    thread::spawn(move || {
+        thread::sleep(Duration::from_millis(350));
+        if let Some(prev) = previous_clipboard {
+            if let Ok(mut cb) = Clipboard::new() {
+                let _ = cb.set_text(prev);
+            }
+        }
+    });
 
     Ok(())
 }

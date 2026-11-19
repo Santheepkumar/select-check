@@ -5,12 +5,28 @@ pub mod tray;
 
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 
 use overlay::{dismiss_overlay, expand_overlay, open_settings_window};
 use replacer::replace_selected_text;
 use selection::start_selection_listener;
 use tray::setup_system_tray;
+
+fn default_provider() -> String {
+    "hosted".to_string()
+}
+
+fn default_slot3() -> String {
+    "professional_polished".to_string()
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn default_trigger() -> String {
+    "auto_mouse".to_string()
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -24,6 +40,18 @@ pub struct DesktopSettings {
     pub device_id: String,
     pub auth_token: Option<String>,
     pub user_email: Option<String>,
+    #[serde(default = "default_provider")]
+    pub provider_type: String,
+    pub custom_api_key: Option<String>,
+    pub custom_base_url: Option<String>,
+    pub custom_model: Option<String>,
+    #[serde(default = "default_slot3")]
+    pub slot3_preset: String,
+    pub slot3_custom_prompt: Option<String>,
+    #[serde(default = "default_true")]
+    pub skip_code_and_numbers: bool,
+    #[serde(default = "default_trigger")]
+    pub trigger_mode: String,
 }
 
 impl Default for DesktopSettings {
@@ -39,10 +67,18 @@ impl Default for DesktopSettings {
                 "Warp".to_string(),
                 "WindowsTerminal".to_string(),
             ],
-            api_url: "http://localhost:8787".to_string(),
+            api_url: "https://run-interpreted-framing-rural.trycloudflare.com".to_string(),
             device_id: "dev_local_desktop".to_string(),
             auth_token: None,
             user_email: None,
+            provider_type: "hosted".to_string(),
+            custom_api_key: None,
+            custom_base_url: None,
+            custom_model: None,
+            slot3_preset: "professional_polished".to_string(),
+            slot3_custom_prompt: None,
+            skip_code_and_numbers: true,
+            trigger_mode: "auto_mouse".to_string(),
         }
     }
 }
@@ -53,6 +89,7 @@ pub struct AppRuntimeState {
     pub last_selected_text: String,
     pub last_source_app: String,
     pub last_cursor: (f64, f64),
+    pub overlay_mode: String,
 }
 
 impl Default for AppRuntimeState {
@@ -63,6 +100,7 @@ impl Default for AppRuntimeState {
             last_selected_text: String::new(),
             last_source_app: String::new(),
             last_cursor: (0.0, 0.0),
+            overlay_mode: "hidden".to_string(),
         }
     }
 }
@@ -88,6 +126,44 @@ fn get_last_selection(state: State<'_, SharedState>) -> Result<(String, String),
     Ok((st.last_selected_text.clone(), st.last_source_app.clone()))
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MacPermissionsStatus {
+    pub accessibility: bool,
+    pub input_monitoring: bool,
+}
+
+#[tauri::command]
+fn check_system_permissions() -> MacPermissionsStatus {
+    #[cfg(target_os = "macos")]
+    {
+        MacPermissionsStatus {
+            accessibility: selection::macos_accessibility::is_trusted(),
+            input_monitoring: selection::macos_accessibility::is_input_monitoring_trusted(),
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        MacPermissionsStatus {
+            accessibility: true,
+            input_monitoring: true,
+        }
+    }
+}
+
+#[tauri::command]
+fn open_permission_settings(permission_type: String) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let url = if permission_type == "input_monitoring" {
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent"
+        } else {
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+        };
+        let _ = std::process::Command::new("open").arg(url).spawn();
+    }
+    Ok(())
+}
+
 pub fn run() {
     let shared_state: SharedState = Arc::new(Mutex::new(AppRuntimeState::default()));
 
@@ -102,10 +178,15 @@ pub fn run() {
             replace_selected_text,
             get_settings,
             save_settings,
-            get_last_selection
+            get_last_selection,
+            check_system_permissions,
+            open_permission_settings
         ])
         .setup(move |app: &mut tauri::App| {
             let handle: AppHandle = app.handle().clone();
+            if let Some(overlay_win) = app.get_webview_window("overlay") {
+                let _ = overlay_win.set_shadow(false);
+            }
             let _ = setup_system_tray(&handle, Arc::clone(&shared_state));
             start_selection_listener(handle, Arc::clone(&shared_state));
             Ok(())
