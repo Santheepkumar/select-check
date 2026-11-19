@@ -190,10 +190,10 @@ export const OverlayView: React.FC<OverlayViewProps> = ({
   const handleDrag = async (e: React.PointerEvent | React.MouseEvent) => {
     if (e.button === 0 && isTauriEnvironment()) {
       try {
-        const { getCurrentWindow } = await import('@tauri-apps/api/window');
-        await getCurrentWindow().startDragging();
-      } catch {
-        // ignore
+        const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow');
+        await getCurrentWebviewWindow().startDragging();
+      } catch (err) {
+        console.warn('startDragging failed:', err);
       }
     }
   };
@@ -221,7 +221,7 @@ export const OverlayView: React.FC<OverlayViewProps> = ({
   return (
     <div
       onClick={(e) => e.stopPropagation()}
-      className="w-[392px] max-h-[450px] flex flex-col select-none rounded-2xl border border-white/[0.08] bg-[#0c0d12]/98 p-3 text-slate-100 shadow-2xl shadow-black/80 backdrop-blur-2xl ring-1 ring-white/[0.04]"
+      className="w-[392px] max-h-[520px] flex flex-col select-none rounded-2xl border border-white/[0.08] bg-[#0c0d12]/98 p-3 text-slate-100 shadow-2xl shadow-black/80 backdrop-blur-2xl ring-1 ring-white/[0.04] overflow-hidden"
     >
       {/* Draggable Header Bar with Grip Handle */}
       <div
@@ -324,13 +324,15 @@ export const OverlayView: React.FC<OverlayViewProps> = ({
 
       {/* Body */}
       {loading && (
-        <div className="flex flex-col items-center justify-center py-10 text-center">
+        <div className="flex flex-col items-center justify-center py-12 text-center">
           <Loader2 className="mb-2.5 h-6 w-6 animate-spin text-indigo-400" />
           <p className="text-xs font-medium text-slate-300">
             Checking grammar & crafting top 3 improvements...
           </p>
-          {settings?.providerType === 'local_ollama' && (
+          {settings?.providerType === 'local_ollama' ? (
             <p className="mt-1 text-[11px] text-emerald-400">Processing locally via Ollama</p>
+          ) : (
+            <p className="mt-1 text-[11px] text-slate-500">Analyzing tone, grammar, and clarity</p>
           )}
         </div>
       )}
@@ -362,8 +364,8 @@ export const OverlayView: React.FC<OverlayViewProps> = ({
       )}
 
       {result && !loading && (
-        <div className="flex flex-col flex-1 min-h-0">
-          <div className="space-y-1.5 overflow-y-auto max-h-[355px] pr-1 custom-scrollbar">
+        <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+          <div className="flex-1 space-y-2 overflow-y-auto overscroll-contain pr-1 custom-scrollbar">
             {result.suggestions.map((item, idx) => (
               <SuggestionCard
                 key={`${item.style}-${idx}`}
@@ -376,7 +378,7 @@ export const OverlayView: React.FC<OverlayViewProps> = ({
             ))}
           </div>
 
-          <div className="flex items-center justify-between pt-2 text-[10px] text-slate-500 select-none shrink-0 border-t border-white/[0.04] mt-1.5">
+          <div className="flex items-center justify-between pt-2 text-[10px] text-slate-500 select-none shrink-0 border-t border-white/[0.04] mt-2">
             <span>Press 1, 2, or 3 to replace in-place</span>
             <span>Esc to close</span>
           </div>
