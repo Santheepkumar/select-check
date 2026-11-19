@@ -29,6 +29,7 @@ struct MouseTracker {
     last_pos: (f64, f64),
     last_click_time: Option<Instant>,
     last_click_pos: (f64, f64),
+    click_count: u32,
 }
 
 impl Default for MouseTracker {
@@ -39,6 +40,7 @@ impl Default for MouseTracker {
             last_pos: (0.0, 0.0),
             last_click_time: None,
             last_click_pos: (0.0, 0.0),
+            click_count: 0,
         }
     }
 }
@@ -91,9 +93,6 @@ pub mod macos_accessibility {
 /// Checks if the given application name matches any entry in the user's blocklist (case-insensitive)
 pub fn is_app_blocked(app_name: &str, blocked_apps: &[String]) -> bool {
     let lower = app_name.to_lowercase();
-    if lower.contains("selectcheck") || lower.contains("select-check") {
-        return true;
-    }
     blocked_apps
         .iter()
         .any(|blocked| !blocked.is_empty() && lower.contains(&blocked.to_lowercase()))
@@ -193,18 +192,26 @@ pub fn capture_selected_text_safely(skip_code_and_numbers: bool) -> Option<Strin
         use core_graphics::event::{CGEvent, CGEventFlags, CGEventTapLocation};
         use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
         // Brief pause to allow host application selection state to settle
-        thread::sleep(Duration::from_millis(50));
+        thread::sleep(Duration::from_millis(40));
 
         if let Ok(source) = CGEventSource::new(CGEventSourceStateID::CombinedSessionState) {
+            // Keycode 55 is kVK_Command (Command modifier)
             // Keycode 8 is kVK_ANSI_C ('c')
-            if let Ok(event_down) = CGEvent::new_keyboard_event(source.clone(), 8, true) {
-                // STRICTLY set flags to Command only (removes any hardware Shift/Option the user is holding!)
-                event_down.set_flags(CGEventFlags::CGEventFlagCommand);
-                event_down.post(CGEventTapLocation::HID);
+            if let Ok(cmd_down) = CGEvent::new_keyboard_event(source.clone(), 55, true) {
+                cmd_down.set_flags(CGEventFlags::CGEventFlagCommand);
+                cmd_down.post(CGEventTapLocation::Session);
             }
-            if let Ok(event_up) = CGEvent::new_keyboard_event(source, 8, false) {
-                event_up.set_flags(CGEventFlags::CGEventFlagCommand);
-                event_up.post(CGEventTapLocation::HID);
+            if let Ok(c_down) = CGEvent::new_keyboard_event(source.clone(), 8, true) {
+                c_down.set_flags(CGEventFlags::CGEventFlagCommand);
+                c_down.post(CGEventTapLocation::Session);
+            }
+            if let Ok(c_up) = CGEvent::new_keyboard_event(source.clone(), 8, false) {
+                c_up.set_flags(CGEventFlags::CGEventFlagCommand);
+                c_up.post(CGEventTapLocation::Session);
+            }
+            if let Ok(cmd_up) = CGEvent::new_keyboard_event(source, 55, false) {
+                cmd_up.set_flags(CGEventFlags::empty());
+                cmd_up.post(CGEventTapLocation::Session);
             }
         }
     }
@@ -218,7 +225,7 @@ pub fn capture_selected_text_safely(skip_code_and_numbers: bool) -> Option<Strin
         }
     }
 
-    thread::sleep(Duration::from_millis(60));
+    thread::sleep(Duration::from_millis(50));
 
     let captured = clipboard.get_text().ok().map(|s| s.trim().to_string());
 
@@ -258,9 +265,26 @@ fn trigger_selection_check(cx: f64, cy: f64, app_handle: &AppHandle, state: &Sha
         return;
     }
 
-    let active_app_name = get_active_window()
-        .map(|w| w.app_name)
-        .unwrap_or_else(|_| "Unknown".to_string());
+    let active_window = get_active_window().ok();
+    let active_app_name = active_window
+        .as_ref()
+        .map(|w| w.app_name.clone())
+        .unwrap_or_else(|| "Unknown".to_string());
+    let active_title = active_window
+        .as_ref()
+        .map(|w| w.title.clone())
+        .unwrap_or_default();
+
+    let lower_app = active_app_name.to_lowercase();
+    let lower_title = active_title.to_lowercase();
+
+    // Only block SelectCheck if the user is actively focused on its Settings or Workspace window.
+    // NEVER block when SelectCheck is reported because the non-activating overlay ball was visible!
+    if (lower_app.contains("selectcheck") || lower_app.contains("select-check"))
+        && (lower_title.contains("settings") || lower_title.contains("workspace"))
+    {
+        return;
+    }
 
     if is_app_blocked(&active_app_name, &blocked_apps) {
         return;
@@ -326,6 +350,7 @@ pub fn start_selection_listener(app_handle: AppHandle, state: SharedState) {
 
         let tracker = Arc::new(Mutex::new(MouseTracker::default()));
         let mach_port_holder = Arc::new(AtomicUsize::new(0));
+        let debounce_seq = Arc::new(std::sync::atomic::AtomicU64::new(0));
 
         // Step 2: Loop until accessibility is trusted and event tap is created
         let tap = loop {
@@ -339,6 +364,7 @@ pub fn start_selection_listener(app_handle: AppHandle, state: SharedState) {
             let app_handle_clone = app_handle.clone();
             let state_clone = Arc::clone(&state);
             let mach_port_clone = Arc::clone(&mach_port_holder);
+            let debounce_seq_clone = Arc::clone(&debounce_seq);
 
             let tap_res = CGEventTap::new(
                 CGEventTapLocation::HID,
@@ -412,26 +438,35 @@ pub fn start_selection_listener(app_handle: AppHandle, state: SharedState) {
 
                             let is_drag = if let (Some((dx, dy)), Some(dt)) = (tr.down_pos, tr.down_time) {
                                 let dist = ((release_pos.0 - dx).powi(2) + (release_pos.1 - dy).powi(2)).sqrt();
-                                dist > 10.0 && now.duration_since(dt) < Duration::from_secs(10)
+                                dist >= 4.0 && now.duration_since(dt) < Duration::from_secs(10)
                             } else {
                                 false
                             };
 
-                            let is_double_click = if let Some(prev_click) = tr.last_click_time {
+                            let is_multi_click = if let Some(prev_click) = tr.last_click_time {
                                 let dist = ((release_pos.0 - tr.last_click_pos.0).powi(2)
                                     + (release_pos.1 - tr.last_click_pos.1).powi(2))
                                 .sqrt();
-                                now.duration_since(prev_click) < Duration::from_millis(360) && dist < 8.0
+                                if now.duration_since(prev_click) < Duration::from_millis(380) && dist < 8.0 {
+                                    tr.click_count += 1;
+                                    true
+                                } else {
+                                    tr.click_count = 1;
+                                    false
+                                }
                             } else {
+                                tr.click_count = 1;
                                 false
                             };
+
+                            let is_word_or_line_select = is_multi_click && tr.click_count >= 2;
 
                             tr.last_click_time = Some(now);
                             tr.last_click_pos = release_pos;
                             tr.down_pos = None;
                             tr.down_time = None;
 
-                            if !is_drag && !is_double_click {
+                            if !is_drag && !is_word_or_line_select {
                                 // Single click: if clicked outside overlay, user unselected text -> dismiss overlay!
                                 if !is_point_inside_overlay(&app_handle_clone, release_pos.0, release_pos.1) {
                                     let _ = dismiss_overlay_window(&app_handle_clone);
@@ -449,8 +484,8 @@ pub fn start_selection_listener(app_handle: AppHandle, state: SharedState) {
                             let has_shift = flags.contains(CGEventFlags::CGEventFlagShift);
                             let has_cmd = flags.contains(CGEventFlags::CGEventFlagCommand);
 
-                            if is_arrow && has_shift {
-                                // Shift + Arrow keys (or Cmd+Shift+Arrow / Option+Shift+Arrow): extending text selection
+                            if (is_arrow && has_shift) || (keycode == 0 && has_cmd) {
+                                // Shift + Arrow keys (or Cmd+Shift+Arrow / Option+Shift+Arrow) or Cmd + A: extending or reducing text selection
                                 let live_loc = get_live_cursor_location();
                                 let pos = if live_loc != (0.0, 0.0) {
                                     live_loc
@@ -460,19 +495,19 @@ pub fn start_selection_listener(app_handle: AppHandle, state: SharedState) {
                                     current_pos
                                 };
                                 tr.last_pos = pos;
-                                trigger_selection_check(pos.0, pos.1, &app_handle_clone, &state_clone);
-                            } else if keycode == 0 && has_cmd {
-                                // Cmd + A: Select All text
-                                let live_loc = get_live_cursor_location();
-                                let pos = if live_loc != (0.0, 0.0) {
-                                    live_loc
-                                } else if tr.last_pos != (0.0, 0.0) {
-                                    tr.last_pos
-                                } else {
-                                    current_pos
-                                };
-                                tr.last_pos = pos;
-                                trigger_selection_check(pos.0, pos.1, &app_handle_clone, &state_clone);
+
+                                // Debounce rapid keystrokes to bundle multi-tap selection into a single clean capture
+                                let current_seq = debounce_seq_clone.fetch_add(1, Ordering::SeqCst) + 1;
+                                let seq_ref = Arc::clone(&debounce_seq_clone);
+                                let app_h = app_handle_clone.clone();
+                                let st_ref = Arc::clone(&state_clone);
+
+                                thread::spawn(move || {
+                                    thread::sleep(Duration::from_millis(75));
+                                    if seq_ref.load(Ordering::SeqCst) == current_seq {
+                                        trigger_selection_check(pos.0, pos.1, &app_h, &st_ref);
+                                    }
+                                });
                             } else if (is_arrow && !has_shift) || keycode == 53 {
                                 // Plain arrow key or Escape without Shift clears selection -> dismiss overlay!
                                 let _ = dismiss_overlay_window(&app_handle_clone);
@@ -590,7 +625,7 @@ mod tests {
 
     #[test]
     fn test_app_blocklist_matching() {
-        let blocked = vec!["Terminal".to_string(), "iTerm2".to_string()];
+        let blocked = vec!["Terminal".to_string(), "iTerm2".to_string(), "SelectCheck".to_string()];
         assert!(is_app_blocked("iTerm2", &blocked));
         assert!(is_app_blocked("Apple Terminal", &blocked));
         assert!(is_app_blocked("SelectCheck", &blocked));
