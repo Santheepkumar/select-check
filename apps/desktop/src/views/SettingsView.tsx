@@ -192,7 +192,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   if (!settings) return null;
 
   return (
-    <div className="mx-auto w-full max-w-xl rounded-2xl border border-slate-800 bg-slate-900 p-6 text-slate-100 shadow-2xl">
+    <div className="mx-auto w-full max-w-xl rounded-2xl border border-slate-800 bg-slate-900 p-6 text-slate-100 shadow-2xl mb-12">
       {/* Header */}
       <div className="mb-6 flex items-center justify-between border-b border-slate-800 pb-4">
         <div className="flex items-center gap-3">

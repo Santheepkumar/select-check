@@ -221,7 +221,7 @@ export const OverlayView: React.FC<OverlayViewProps> = ({
   return (
     <div
       onClick={(e) => e.stopPropagation()}
-      className="w-[392px] max-h-[520px] flex flex-col select-none rounded-2xl border border-white/[0.08] bg-[#0c0d12]/98 p-3 text-slate-100 shadow-2xl shadow-black/80 backdrop-blur-2xl ring-1 ring-white/[0.04] overflow-hidden"
+      className={`w-[392px] ${mode === 'card' && result ? 'h-[520px]' : 'max-h-[520px]'} flex flex-col select-none rounded-2xl border border-white/[0.08] bg-[#0c0d12]/98 p-3 text-slate-100 shadow-2xl shadow-black/80 backdrop-blur-2xl ring-1 ring-white/[0.04] overflow-hidden`}
     >
       {/* Draggable Header Bar with Grip Handle */}
       <div
