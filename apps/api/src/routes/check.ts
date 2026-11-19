@@ -58,7 +58,7 @@ checkRouter.post('/check', async (c) => {
     );
   }
 
-  const result = await generateGrammarSuggestions(rawText, env);
+  const result = await generateGrammarSuggestions(rawText, env, body.slot3Config);
   const updatedQuota = await incrementQuota(caller, env);
 
   // Optionally log usage in D1 if configured

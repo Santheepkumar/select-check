@@ -121,4 +121,25 @@ describe('SelectCheck Cloudflare Worker API', () => {
     expect(checkBody.quota.limit).toBe(100);
     expect(checkBody.quota.used).toBe(1);
   });
+
+  it('honors custom slot3Config (e.g. casual_friendly or bullet_points)', async () => {
+    const res = await app.request('/v1/check', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text: 'me and him goes to the store yesterday for buy milk',
+        deviceId: 'dev-slot3-test',
+        slot3Config: {
+          preset: 'casual_friendly'
+        }
+      })
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as CheckResponse;
+    expect(body.suggestions).toHaveLength(3);
+    expect(body.suggestions[2].style).toBe('casual_friendly');
+    expect(body.suggestions[2].label).toBe('Casual & Friendly');
+    expect(body.suggestions[2].text).toContain('Hey!');
+  });
 });

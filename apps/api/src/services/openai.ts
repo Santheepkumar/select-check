@@ -1,4 +1,9 @@
-import type { SuggestionItem } from '@select-check/shared';
+import {
+  SLOT3_PRESET_MAP,
+  type Slot3RequestConfig,
+  type SuggestionItem,
+  type SuggestionStyle
+} from '@select-check/shared';
 import type { CloudflareBindings } from '../types.js';
 
 export interface OpenAICheckResult {
@@ -12,7 +17,7 @@ const SUGGESTIONS_JSON_SCHEMA = {
   schema: {
     type: 'object',
     additionalProperties: false,
-    required: ['detectedLanguage', 'grammarFix', 'clearConcise', 'professionalPolished'],
+    required: ['detectedLanguage', 'grammarFix', 'clearConcise', 'slotThree'],
     properties: {
       detectedLanguage: {
         type: 'string',
@@ -48,18 +53,18 @@ const SUGGESTIONS_JSON_SCHEMA = {
           }
         }
       },
-      professionalPolished: {
+      slotThree: {
         type: 'object',
         additionalProperties: false,
         required: ['text', 'summary'],
         properties: {
           text: {
             type: 'string',
-            description: 'Elevated, confident, professional rewrite in the same language.'
+            description: 'The requested third transformation rewrite as instructed in the prompt.'
           },
           summary: {
             type: 'string',
-            description: 'Short 3-6 word summary of the tone enhancement.'
+            description: 'Short 3-6 word summary of the transformation.'
           }
         }
       }
@@ -69,14 +74,23 @@ const SUGGESTIONS_JSON_SCHEMA = {
 
 export async function generateGrammarSuggestions(
   inputText: string,
-  env: CloudflareBindings = {}
+  env: CloudflareBindings = {},
+  slot3Config?: Slot3RequestConfig
 ): Promise<OpenAICheckResult> {
   const apiKey = env.OPENAI_API_KEY || process.env.OPENAI_API_KEY;
   const model = env.OPENAI_MODEL || process.env.OPENAI_MODEL || 'gpt-4o-mini';
 
   if (!apiKey) {
-    return buildLocalHeuristicSuggestions(inputText);
+    return buildLocalHeuristicSuggestions(inputText, slot3Config);
   }
+
+  const presetKey = slot3Config?.preset || 'professional_polished';
+  const presetMeta = SLOT3_PRESET_MAP[presetKey] || SLOT3_PRESET_MAP.professional_polished;
+  const slot3Instruction =
+    presetKey === 'custom' && slot3Config?.customPrompt
+      ? slot3Config.customPrompt
+      : presetMeta.systemInstruction;
+  const slot3Label = presetMeta.label;
 
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -91,7 +105,11 @@ export async function generateGrammarSuggestions(
         {
           role: 'system',
           content:
-            'You are an expert multilingual grammar checker and writing assistant. Detect the language of the user text and keep all 3 suggestions in that exact language. Provide: 1) grammarFix (fix only grammar, spelling, and punctuation with minimal word changes), 2) clearConcise (crisp, natural, easy-to-read rewrite), and 3) professionalPolished (elevated, polite, professional tone).'
+            `You are an expert multilingual writing assistant. Detect the language of the user text and maintain appropriate language.\n` +
+            `Provide 3 outputs:\n` +
+            `1) grammarFix: Fix only grammar, spelling, and punctuation with minimal word changes.\n` +
+            `2) clearConcise: Crisp, natural, easy-to-read rewrite.\n` +
+            `3) slotThree: ${slot3Instruction}`
         },
         {
           role: 'user',
@@ -123,8 +141,13 @@ export async function generateGrammarSuggestions(
     detectedLanguage: string;
     grammarFix: { text: string; summary: string };
     clearConcise: { text: string; summary: string };
-    professionalPolished: { text: string; summary: string };
+    slotThree: { text: string; summary: string };
   };
+
+  const slot3Style: SuggestionStyle =
+    presetKey === 'custom'
+      ? 'custom_slot'
+      : (presetKey as SuggestionStyle);
 
   return {
     detectedLanguage: parsed.detectedLanguage || 'EN',
@@ -142,10 +165,10 @@ export async function generateGrammarSuggestions(
         summary: parsed.clearConcise.summary
       },
       {
-        style: 'professional_polished',
-        label: 'Professional & Polished',
-        text: parsed.professionalPolished.text,
-        summary: parsed.professionalPolished.summary
+        style: slot3Style,
+        label: slot3Label,
+        text: parsed.slotThree.text,
+        summary: parsed.slotThree.summary
       }
     ]
   };
@@ -155,7 +178,10 @@ export async function generateGrammarSuggestions(
  * Smart deterministic grammar & tone transformer used when OPENAI_API_KEY is not configured
  * in local development or automated tests.
  */
-export function buildLocalHeuristicSuggestions(inputText: string): OpenAICheckResult {
+export function buildLocalHeuristicSuggestions(
+  inputText: string,
+  slot3Config?: Slot3RequestConfig
+): OpenAICheckResult {
   const trimmed = inputText.trim().replace(/\s+/g, ' ');
 
   // Basic language detection heuristic
@@ -203,27 +229,61 @@ export function buildLocalHeuristicSuggestions(inputText: string): OpenAICheckRe
     .replace(/\bI was wondering if you could\b/gi, 'Please');
 
   if (clearConcise === grammarFixed) {
-    clearConcise = grammarFixed.replace(/\.$/, '') + ' — clearly and concisely stated.';
-    // Or make it a crisp natural phrasing without meta-suffix:
     clearConcise = grammarFixed
       .replace(/\byesterday to buy\b/gi, 'yesterday for')
       .replace(/\bvery\s+/gi, '');
   }
 
-  // Professional & polished version
-  let professional = grammarFixed;
-  if (/^can you\b/i.test(grammarFixed)) {
-    professional = grammarFixed.replace(/^can you\b/i, 'Could you please');
-  } else if (/^send me\b/i.test(grammarFixed)) {
-    professional = grammarFixed.replace(/^send me\b/i, 'Could you kindly share');
-  } else if (!/^(Could|Please|Thank|We|He|She|I\b)/i.test(grammarFixed)) {
-    professional = `Please note: ${grammarFixed.charAt(0).toLowerCase()}${grammarFixed.slice(1)}`;
-  } else {
-    professional = grammarFixed
-      .replace(/\bwent to the store yesterday to buy\b/i, 'visited the store yesterday to purchase')
-      .replace(/\bneed to fix\b/i, 'should resolve')
-      .replace(/\bget back to me\b/i, 'let me know your thoughts');
+  // Slot 3 handling based on configured preset
+  const presetKey = slot3Config?.preset || 'professional_polished';
+  const meta = SLOT3_PRESET_MAP[presetKey] || SLOT3_PRESET_MAP.professional_polished;
+
+  let slot3Text = grammarFixed;
+  let slot3Summary = 'Elevated & workplace-ready tone';
+
+  switch (presetKey) {
+    case 'casual_friendly':
+      slot3Text = `Hey! ${grammarFixed.charAt(0).toLowerCase()}${grammarFixed.slice(1).replace(/\.$/, '')} :)`;
+      slot3Summary = 'Warm & conversational tone';
+      break;
+    case 'bullet_points':
+      slot3Text = `• ${grammarFixed.replace(/\.$/, '')}\n• Action item ready for review`;
+      slot3Summary = 'Actionable bullet list summary';
+      break;
+    case 'executive_brief':
+      slot3Text = `TL;DR: ${clearConcise}`;
+      slot3Summary = 'Concise executive takeaway';
+      break;
+    case 'translate_spanish':
+      slot3Text = `Hola, ${grammarFixed.replace(/yesterday/i, 'ayer').replace(/client/i, 'cliente')}`;
+      slot3Summary = 'Translated to natural Spanish';
+      break;
+    case 'custom':
+      slot3Text = `${grammarFixed} [Custom: ${slot3Config?.customPrompt || 'Enhanced'}]`;
+      slot3Summary = 'Applied custom prompt transformation';
+      break;
+    case 'professional_polished':
+    default:
+      if (/^can you\b/i.test(grammarFixed)) {
+        slot3Text = grammarFixed.replace(/^can you\b/i, 'Could you please');
+      } else if (/^send me\b/i.test(grammarFixed)) {
+        slot3Text = grammarFixed.replace(/^send me\b/i, 'Could you kindly share');
+      } else if (!/^(Could|Please|Thank|We|He|She|I\b)/i.test(grammarFixed)) {
+        slot3Text = `Please note: ${grammarFixed.charAt(0).toLowerCase()}${grammarFixed.slice(1)}`;
+      } else {
+        slot3Text = grammarFixed
+          .replace(/\bwent to the store yesterday to buy\b/i, 'visited the store yesterday to purchase')
+          .replace(/\bneed to fix\b/i, 'should resolve')
+          .replace(/\bget back to me\b/i, 'let me know your thoughts');
+      }
+      slot3Summary = 'Elevated & workplace-ready tone';
+      break;
   }
+
+  const slot3Style: SuggestionStyle =
+    presetKey === 'custom'
+      ? 'custom_slot'
+      : (presetKey as SuggestionStyle);
 
   return {
     detectedLanguage,
@@ -241,10 +301,10 @@ export function buildLocalHeuristicSuggestions(inputText: string): OpenAICheckRe
         summary: 'Direct, natural & easy to read'
       },
       {
-        style: 'professional_polished',
-        label: 'Professional & Polished',
-        text: professional,
-        summary: 'Elevated & workplace-ready tone'
+        style: slot3Style,
+        label: meta.label,
+        text: slot3Text,
+        summary: slot3Summary
       }
     ]
   };
