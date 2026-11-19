@@ -1,11 +1,19 @@
-import type { AppSettings } from '@select-check/shared';
+import {
+  isTextEligibleForCheck,
+  SLOT3_PRESET_MAP,
+  type AppSettings
+} from '@select-check/shared';
 import {
   CheckCircle2,
+  Code2,
+  Cpu,
+  Lock,
   Mail,
   MessageSquare,
   Settings,
   Sparkles,
-  Terminal
+  Terminal,
+  Zap
 } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
 import { getAppSettings } from '../services/tauriBridge.js';
@@ -35,6 +43,13 @@ const SIMULATED_APPS: SimulatedApp[] = [
       'Hi Sarah, I was wondering if you could send me the Q4 budget report due to the fact that we need to fix the projections before tomorrow morning.'
   },
   {
+    id: 'code',
+    name: 'VS Code (Code & Prose)',
+    icon: <Code2 className="h-4 w-4 text-amber-400" />,
+    defaultText:
+      '// SelectCheck Smart Noise Filter Demo:\nconst userTotal = 1294.50;\nimport { calculateTax } from "./tax.js";\n\n// Try selecting this prose comment:\n// me and him was testing the application yesterday to buy some server credits.'
+  },
+  {
     id: 'terminal',
     name: 'Terminal',
     icon: <Terminal className="h-4 w-4 text-emerald-400" />,
@@ -48,12 +63,14 @@ export const InteractiveWorkspace: React.FC = () => {
   const [texts, setTexts] = useState<Record<string, string>>({
     slack: SIMULATED_APPS[0].defaultText,
     mail: SIMULATED_APPS[1].defaultText,
-    terminal: SIMULATED_APPS[2].defaultText
+    code: SIMULATED_APPS[2].defaultText,
+    terminal: SIMULATED_APPS[3].defaultText
   });
 
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [replacedBanner, setReplacedBanner] = useState<string | null>(null);
+  const [filterIgnoredBanner, setFilterIgnoredBanner] = useState<string | null>(null);
 
   // Selection state inside the active editor
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -64,6 +81,37 @@ export const InteractiveWorkspace: React.FC = () => {
     x: number;
     y: number;
   } | null>(null);
+  const [overlayPos, setOverlayPos] = useState<{ x: number; y: number } | null>(null);
+  const dragRef = useRef<{ startX: number; startY: number; initX: number; initY: number } | null>(null);
+
+  const handleDragStart = (e: React.PointerEvent) => {
+    if (!overlayPos) return;
+    dragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      initX: overlayPos.x,
+      initY: overlayPos.y
+    };
+
+    const handlePointerMove = (ev: PointerEvent) => {
+      if (!dragRef.current) return;
+      const dx = ev.clientX - dragRef.current.startX;
+      const dy = ev.clientY - dragRef.current.startY;
+      setOverlayPos({
+        x: Math.min(window.innerWidth - 410, Math.max(12, dragRef.current.initX + dx)),
+        y: Math.min(window.innerHeight - 380, Math.max(12, dragRef.current.initY + dy))
+      });
+    };
+
+    const handlePointerUp = () => {
+      dragRef.current = null;
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+  };
 
   useEffect(() => {
     getAppSettings().then(setSettings);
@@ -82,7 +130,7 @@ export const InteractiveWorkspace: React.FC = () => {
     const el = textareaRef.current;
     if (!el || !settings) return;
 
-    if (!settings.autoShowOnSelect || isCurrentAppBlocked) {
+    if (!settings.autoShowOnSelect || settings.triggerMode === 'hotkey_only' || isCurrentAppBlocked) {
       setSelectionRange(null);
       return;
     }
@@ -91,16 +139,34 @@ export const InteractiveWorkspace: React.FC = () => {
     const end = el.selectionEnd;
     const selected = el.value.slice(start, end).trim();
 
-    if (selected.length >= 2) {
+    if (selected.length < 2) {
+      setSelectionRange(null);
+      return;
+    }
+
+    const isEligible = isTextEligibleForCheck(selected, {
+      skipCodeAndNumbers: settings.skipCodeAndNumbers
+    });
+
+    if (isEligible) {
+      setFilterIgnoredBanner(null);
+      const coordX = Math.min(window.innerWidth - 410, Math.max(24, e.clientX + 10));
+      const coordY = Math.min(window.innerHeight - 380, Math.max(24, e.clientY + 10));
       setSelectionRange({
         start,
         end,
         text: selected,
-        x: Math.min(window.innerWidth - 410, Math.max(24, e.clientX + 10)),
-        y: Math.min(window.innerHeight - 380, Math.max(24, e.clientY + 10))
+        x: coordX,
+        y: coordY
       });
+      setOverlayPos({ x: coordX, y: coordY });
     } else {
       setSelectionRange(null);
+      setOverlayPos(null);
+      if (settings.skipCodeAndNumbers) {
+        setFilterIgnoredBanner('Smart Filter suppressed popup: Selection detected as code or numbers.');
+        setTimeout(() => setFilterIgnoredBanner(null), 3000);
+      }
     }
   };
 
@@ -117,24 +183,32 @@ export const InteractiveWorkspace: React.FC = () => {
       [activeApp.id]: updatedText
     }));
     setSelectionRange(null);
+    setOverlayPos(null);
     setReplacedBanner('Replaced selected text in-place!');
     setTimeout(() => setReplacedBanner(null), 2800);
   };
 
-  const selectAllSampleText = () => {
+  const selectSampleProse = () => {
     const el = textareaRef.current;
     if (!el || isCurrentAppBlocked) return;
     el.focus();
     el.setSelectionRange(0, el.value.length);
     const rect = el.getBoundingClientRect();
+    const coordX = Math.min(window.innerWidth - 410, rect.left + 120);
+    const coordY = rect.top + 80;
     setSelectionRange({
       start: 0,
       end: el.value.length,
       text: el.value.trim(),
-      x: Math.min(window.innerWidth - 410, rect.left + 120),
-      y: rect.top + 80
+      x: coordX,
+      y: coordY
     });
+    setOverlayPos({ x: coordX, y: coordY });
   };
+
+  const activeSlot3Meta = settings
+    ? SLOT3_PRESET_MAP[settings.slot3Preset] || SLOT3_PRESET_MAP.professional_polished
+    : SLOT3_PRESET_MAP.professional_polished;
 
   return (
     <div
@@ -142,7 +216,7 @@ export const InteractiveWorkspace: React.FC = () => {
       className="min-h-screen bg-slate-950 text-slate-100 p-6"
     >
       {/* Top Bar */}
-      <header className="mx-auto mb-6 flex max-w-4xl items-center justify-between rounded-2xl border border-slate-800/90 bg-slate-900/80 px-5 py-3.5 backdrop-blur-md">
+      <header className="mx-auto mb-6 flex max-w-4xl flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-800/90 bg-slate-900/80 px-5 py-3.5 backdrop-blur-md">
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 via-violet-500 to-fuchsia-500 text-white shadow-md shadow-indigo-500/20">
             <Sparkles className="h-5 w-5" />
@@ -155,22 +229,53 @@ export const InteractiveWorkspace: React.FC = () => {
               </span>
             </div>
             <p className="text-xs text-slate-400">
-              Highlight any text below to trigger the floating grammar ball → click to get Top 3 OpenAI suggestions
+              Cross-platform lightweight floating rewrite assistant (<span className="text-emerald-400 font-medium">&lt;20MB RAM</span> vs Grammarly 650MB)
             </p>
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            setShowSettingsModal(true);
-          }}
-          className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800 px-3.5 py-2 text-xs font-medium text-slate-200 transition hover:border-slate-600 hover:bg-slate-700"
-        >
-          <Settings className="h-4 w-4 text-indigo-400" />
-          Settings & Quota
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Active Engine Badge */}
+          {settings && (
+            <div className="flex items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-950/80 px-2.5 py-1.5 text-[11px] text-slate-300">
+              {settings.providerType === 'byok_groq' ? (
+                <>
+                  <Zap className="h-3 w-3 text-amber-400" />
+                  <span>Groq Llama 3.3 70B</span>
+                </>
+              ) : settings.providerType === 'local_ollama' ? (
+                <>
+                  <Lock className="h-3 w-3 text-emerald-400" />
+                  <span>Local Ollama (Offline)</span>
+                </>
+              ) : settings.providerType === 'byok_openai' ? (
+                <>
+                  <Cpu className="h-3 w-3 text-sky-400" />
+                  <span>OpenAI BYOK</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-3 w-3 text-indigo-400" />
+                  <span>Cloudflare Edge</span>
+                </>
+              )}
+              <span className="text-slate-600">|</span>
+              <span className="text-slate-400">Slot 3: {activeSlot3Meta.label}</span>
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowSettingsModal(true);
+            }}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800 px-3.5 py-2 text-xs font-medium text-slate-200 transition hover:border-slate-600 hover:bg-slate-700"
+          >
+            <Settings className="h-4 w-4 text-indigo-400" />
+            Settings
+          </button>
+        </div>
       </header>
 
       {/* Main Simulated OS Workspace */}
@@ -195,6 +300,7 @@ export const InteractiveWorkspace: React.FC = () => {
                   onClick={() => {
                     setActiveAppId(app.id);
                     setSelectionRange(null);
+                    setFilterIgnoredBanner(null);
                   }}
                   className={`inline-flex items-center gap-2 rounded-xl border px-3.5 py-2 text-xs font-medium transition ${
                     activeAppId === app.id
@@ -216,12 +322,12 @@ export const InteractiveWorkspace: React.FC = () => {
 
           <button
             type="button"
-            onClick={selectAllSampleText}
+            onClick={selectSampleProse}
             disabled={isCurrentAppBlocked}
             className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Sparkles className="h-3.5 w-3.5" />
-            Select Sample Sentence
+            Select Text
           </button>
         </div>
 
@@ -244,7 +350,7 @@ export const InteractiveWorkspace: React.FC = () => {
               </span>
             ) : (
               <span className="text-[11px] text-slate-400">
-                Drag-select or double-click any words below
+                Drag-select or double-click any words below to trigger floating ball
               </span>
             )}
           </div>
@@ -252,7 +358,7 @@ export const InteractiveWorkspace: React.FC = () => {
           <div className="p-5">
             <textarea
               ref={textareaRef}
-              rows={5}
+              rows={6}
               value={texts[activeApp.id]}
               onChange={(e) =>
                 setTexts((prev) => ({ ...prev, [activeApp.id]: e.target.value }))
@@ -260,7 +366,7 @@ export const InteractiveWorkspace: React.FC = () => {
               onMouseUp={handleMouseUpOnEditor}
               onDoubleClick={handleMouseUpOnEditor}
               placeholder="Type or select text here..."
-              className="w-full resize-none rounded-xl border border-slate-800 bg-slate-950/70 p-4 text-sm leading-relaxed text-slate-100 placeholder-slate-500 focus:border-indigo-500/60 focus:outline-none"
+              className="w-full resize-none rounded-xl border border-slate-800 bg-slate-950/70 p-4 font-mono text-xs leading-relaxed text-slate-100 placeholder-slate-500 focus:border-indigo-500/60 focus:outline-none"
             />
 
             {replacedBanner && (
@@ -269,25 +375,36 @@ export const InteractiveWorkspace: React.FC = () => {
                 {replacedBanner}
               </div>
             )}
+
+            {filterIgnoredBanner && (
+              <div className="mt-3 flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-2 text-xs font-medium text-amber-300">
+                <Sparkles className="h-4 w-4" />
+                {filterIgnoredBanner}
+              </div>
+            )}
           </div>
         </div>
       </main>
 
       {/* Floating Overlay (Ball -> 3 Suggestions Popover) */}
-      {selectionRange && (
+      {selectionRange && overlayPos && (
         <div
           style={{
             position: 'fixed',
-            left: `${selectionRange.x}px`,
-            top: `${selectionRange.y}px`,
+            left: `${overlayPos.x}px`,
+            top: `${overlayPos.y}px`,
             zIndex: 50
           }}
         >
           <OverlayView
             initialText={selectionRange.text}
             onReplaceText={handleReplaceInPlace}
-            onDismiss={() => setSelectionRange(null)}
+            onDismiss={() => {
+              setSelectionRange(null);
+              setOverlayPos(null);
+            }}
             onOpenSettings={() => setShowSettingsModal(true)}
+            onDragStart={handleDragStart}
           />
         </div>
       )}

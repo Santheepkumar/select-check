@@ -1,6 +1,21 @@
-import type { AppSettings, CheckResponse } from '@select-check/shared';
-import { Diff, Globe, Loader2, Settings, Sparkles, X } from 'lucide-react';
-import React, { useCallback, useEffect, useState } from 'react';
+import {
+  isTextEligibleForCheck,
+  type AppSettings,
+  type CheckResponse
+} from '@select-check/shared';
+import {
+  Cpu,
+  Diff,
+  Globe,
+  GripHorizontal,
+  Loader2,
+  Lock,
+  Settings,
+  Sparkles,
+  X,
+  Zap
+} from 'lucide-react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { FloatingBall } from '../components/FloatingBall.js';
 import { SuggestionCard } from '../components/SuggestionCard.js';
 import { checkGrammarWithApi } from '../services/api.js';
@@ -19,13 +34,15 @@ interface OverlayViewProps {
   onReplaceText?: (replacementText: string) => void;
   onDismiss?: () => void;
   onOpenSettings?: () => void;
+  onDragStart?: (e: React.PointerEvent) => void;
 }
 
 export const OverlayView: React.FC<OverlayViewProps> = ({
   initialText = '',
   onReplaceText,
   onDismiss,
-  onOpenSettings
+  onOpenSettings,
+  onDragStart
 }) => {
   const [mode, setMode] = useState<'ball' | 'card'>('ball');
   const [selectedText, setSelectedText] = useState(initialText);
@@ -50,34 +67,86 @@ export const OverlayView: React.FC<OverlayViewProps> = ({
     });
   }, []);
 
-  // Listen for native Tauri selection-detected event when running in Tauri window
-  useEffect(() => {
-    if (!isTauriEnvironment()) return;
-    let unlistenFn: (() => void) | undefined;
-
-    import('@tauri-apps/api/event').then(({ listen }) => {
-      listen<{ text: string; app_name: string }>('selection-detected', (event) => {
-        setSelectedText(event.payload.text);
-        setMode('ball');
-        setResult(null);
-        setError(null);
-      }).then((fn) => {
-        unlistenFn = fn;
-      });
-    });
-
-    return () => {
-      if (unlistenFn) unlistenFn();
-    };
-  }, []);
+  const isTriggeringRef = useRef(false);
 
   const handleClose = useCallback(async () => {
+    isTriggeringRef.current = false;
     setMode('ball');
     setResult(null);
     setError(null);
     await dismissNativeOverlay();
     onDismiss?.();
   }, [onDismiss]);
+
+  const handleBallTrigger = useCallback(async () => {
+    if (isTriggeringRef.current || mode === 'card') return;
+    isTriggeringRef.current = true;
+
+    setMode('card');
+    setLoading(true);
+    setError(null);
+    await expandNativeOverlay();
+
+    try {
+      const currentSettings = settings || (await getAppSettings());
+      setSettings(currentSettings);
+      const res = await checkGrammarWithApi(selectedText, currentSettings);
+      setResult(res);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to check grammar');
+    } finally {
+      setLoading(false);
+      isTriggeringRef.current = false;
+    }
+  }, [mode, settings, selectedText]);
+
+  // Listen for native Tauri selection-detected, trigger-ball, and overlay-dismissed events
+  useEffect(() => {
+    if (!isTauriEnvironment()) return;
+    let unlistenFn: (() => void) | undefined;
+    let unlistenDismiss: (() => void) | undefined;
+    let unlistenTrigger: (() => void) | undefined;
+
+    import('@tauri-apps/api/event').then(({ listen }) => {
+      listen<{ text: string; app_name: string }>('selection-detected', (event) => {
+        const text = event.payload.text;
+        if (
+          isTextEligibleForCheck(text, {
+            skipCodeAndNumbers: settings?.skipCodeAndNumbers ?? true
+          })
+        ) {
+          isTriggeringRef.current = false;
+          setSelectedText(text);
+          setMode('ball');
+          setResult(null);
+          setError(null);
+        }
+      }).then((fn) => {
+        unlistenFn = fn;
+      });
+
+      listen('trigger-ball', () => {
+        handleBallTrigger();
+      }).then((fn) => {
+        unlistenTrigger = fn;
+      });
+
+      listen('overlay-dismissed', () => {
+        isTriggeringRef.current = false;
+        setMode('ball');
+        setResult(null);
+        setError(null);
+      }).then((fn) => {
+        unlistenDismiss = fn;
+      });
+    });
+
+    return () => {
+      if (unlistenFn) unlistenFn();
+      if (unlistenDismiss) unlistenDismiss();
+      if (unlistenTrigger) unlistenTrigger();
+    };
+  }, [settings?.skipCodeAndNumbers, handleBallTrigger]);
 
   // Auto-hide timer in ball mode
   useEffect(() => {
@@ -118,25 +187,19 @@ export const OverlayView: React.FC<OverlayViewProps> = ({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [mode, result, handleClose, handleApplySuggestion]);
 
-  const handleBallClick = async () => {
-    setMode('card');
-    setLoading(true);
-    setError(null);
-    await expandNativeOverlay();
-
-    try {
-      const currentSettings = settings || (await getAppSettings());
-      setSettings(currentSettings);
-      const res = await checkGrammarWithApi(selectedText, currentSettings);
-      setResult(res);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to check grammar');
-    } finally {
-      setLoading(false);
+  const handleDrag = async (e: React.PointerEvent | React.MouseEvent) => {
+    if (e.button === 0 && isTauriEnvironment()) {
+      try {
+        const { getCurrentWindow } = await import('@tauri-apps/api/window');
+        await getCurrentWindow().startDragging();
+      } catch {
+        // ignore
+      }
     }
   };
 
-  const toggleWordDiff = async () => {
+  const toggleWordDiff = async (e: React.MouseEvent) => {
+    e.stopPropagation();
     const nextVal = !showDiff;
     setShowDiff(nextVal);
     if (settings) {
@@ -147,55 +210,92 @@ export const OverlayView: React.FC<OverlayViewProps> = ({
 
   if (mode === 'ball') {
     return (
-      <div className="flex h-11 w-11 items-center justify-center">
-        <FloatingBall
-          onClick={handleBallClick}
-          onMouseEnter={() => setHoveringBall(true)}
-          onMouseLeave={() => setHoveringBall(false)}
-        />
-      </div>
+      <FloatingBall
+        onClick={handleBallTrigger}
+        onMouseEnter={() => setHoveringBall(true)}
+        onMouseLeave={() => setHoveringBall(false)}
+      />
     );
   }
 
   return (
     <div
       onClick={(e) => e.stopPropagation()}
-      className="w-[388px] rounded-2xl border border-slate-700/90 bg-slate-900/95 p-3.5 text-slate-100 shadow-2xl shadow-black/70 backdrop-blur-xl"
+      className="w-[392px] max-h-[450px] flex flex-col select-none rounded-2xl border border-white/[0.08] bg-[#0c0d12]/98 p-3 text-slate-100 shadow-2xl shadow-black/80 backdrop-blur-2xl ring-1 ring-white/[0.04]"
     >
-      {/* Header */}
-      <div className="mb-3 flex items-center justify-between border-b border-slate-800 pb-2.5">
-        <div className="flex items-center gap-2">
-          <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-fuchsia-500 text-white shadow-sm">
-            <Sparkles className="h-3.5 w-3.5" />
+      {/* Draggable Header Bar with Grip Handle */}
+      <div
+        data-tauri-drag-region
+        onPointerDown={handleDrag}
+        onMouseDown={handleDrag}
+        className="mb-2.5 flex cursor-grab active:cursor-grabbing items-center justify-between border-b border-white/[0.06] pb-2 shrink-0 select-none"
+        title="Drag to reposition anywhere on screen"
+      >
+        <div data-tauri-drag-region className="flex items-center gap-2 pointer-events-none">
+          <div className="flex h-5 w-5 items-center justify-center rounded-md border border-indigo-500/30 bg-indigo-500/15 text-indigo-300">
+            <Sparkles className="h-3 w-3" />
           </div>
           <span className="text-xs font-semibold tracking-tight text-white">
-            SelectCheck AI
+            SelectCheck
           </span>
           {result && (
-            <span className="inline-flex items-center gap-1 rounded-md bg-slate-800 px-1.5 py-0.5 text-[10px] font-medium text-slate-300">
+            <span className="inline-flex items-center gap-1 rounded border border-white/[0.08] bg-white/[0.03] px-1.5 py-0.5 text-[10px] font-medium text-slate-300">
               <Globe className="h-2.5 w-2.5 text-indigo-400" />
               {result.detectedLanguage}
             </span>
           )}
         </div>
 
-        <div className="flex items-center gap-1.5">
+        {/* Center Grip Handle */}
+        <div
+          data-tauri-drag-region
+          onPointerDown={handleDrag}
+          onMouseDown={handleDrag}
+          className="flex items-center px-2 text-white/30 transition-colors hover:text-white/70 cursor-grab active:cursor-grabbing"
+        >
+          <GripHorizontal className="h-4 w-4" />
+        </div>
+
+        {/* Action Controls (Explicitly non-draggable) */}
+        <div
+          data-tauri-drag-region={false}
+          onPointerDown={(e) => e.stopPropagation()}
+          className="flex items-center gap-1.5"
+        >
+          {/* Engine / Quota Badge */}
           {result && (
-            <span className="rounded-md bg-slate-800/90 px-1.5 py-0.5 text-[10px] font-medium text-slate-400">
-              {result.quota.used}/{result.quota.limit} today
-            </span>
+            <>
+              {settings?.providerType === 'byok_groq' ? (
+                <span className="inline-flex items-center gap-0.5 rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">
+                  <Zap className="h-2.5 w-2.5" /> Groq
+                </span>
+              ) : settings?.providerType === 'local_ollama' ? (
+                <span className="inline-flex items-center gap-0.5 rounded border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-300">
+                  <Lock className="h-2.5 w-2.5" /> Local
+                </span>
+              ) : settings?.providerType === 'byok_openai' ? (
+                <span className="inline-flex items-center gap-0.5 rounded border border-sky-500/30 bg-sky-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-sky-300">
+                  <Cpu className="h-2.5 w-2.5" /> BYOK
+                </span>
+              ) : (
+                <span className="rounded border border-white/[0.08] bg-white/[0.03] px-1.5 py-0.5 text-[10px] font-medium text-slate-400">
+                  {result.quota.used}/{result.quota.limit}
+                </span>
+              )}
+            </>
           )}
+
           <button
             type="button"
             onClick={toggleWordDiff}
             title="Toggle Word Diff Highlights"
-            className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-medium transition ${
+            className={`inline-flex items-center gap-1 rounded border px-2 py-0.5 text-[10px] font-medium transition-colors ${
               showDiff
                 ? 'border-indigo-500/40 bg-indigo-500/15 text-indigo-300'
-                : 'border-slate-700 bg-slate-800 text-slate-400 hover:text-slate-200'
+                : 'border-white/[0.08] bg-white/[0.03] text-slate-400 hover:text-slate-200 hover:bg-white/[0.06]'
             }`}
           >
-            <Diff className="h-3 w-3" />
+            <Diff className="h-2.5 w-2.5" />
             <span>Diff</span>
           </button>
 
@@ -205,8 +305,8 @@ export const OverlayView: React.FC<OverlayViewProps> = ({
               openNativeSettingsWindow();
               onOpenSettings?.();
             }}
-            title="Settings & Account"
-            className="rounded-lg p-1 text-slate-400 transition hover:bg-slate-800 hover:text-slate-200"
+            title="Settings & AI Engine"
+            className="rounded p-1 text-slate-400 transition hover:bg-white/[0.08] hover:text-slate-200"
           >
             <Settings className="h-3.5 w-3.5" />
           </button>
@@ -215,7 +315,7 @@ export const OverlayView: React.FC<OverlayViewProps> = ({
             type="button"
             onClick={handleClose}
             title="Close (Esc)"
-            className="rounded-lg p-1 text-slate-400 transition hover:bg-slate-800 hover:text-slate-200"
+            className="rounded p-1 text-slate-400 transition hover:bg-white/[0.08] hover:text-slate-200"
           >
             <X className="h-3.5 w-3.5" />
           </button>
@@ -229,18 +329,21 @@ export const OverlayView: React.FC<OverlayViewProps> = ({
           <p className="text-xs font-medium text-slate-300">
             Checking grammar & crafting top 3 improvements...
           </p>
+          {settings?.providerType === 'local_ollama' && (
+            <p className="mt-1 text-[11px] text-emerald-400">Processing locally via Ollama</p>
+          )}
         </div>
       )}
 
       {error && !loading && (
-        <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3.5 text-xs text-rose-200">
+        <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-200">
           <p className="font-medium text-rose-300 mb-1">Unable to complete check</p>
-          <p className="text-rose-200/90 leading-relaxed">{error}</p>
-          <div className="mt-3 flex items-center gap-2">
+          <p className="text-rose-200/90 leading-relaxed text-[11px]">{error}</p>
+          <div className="mt-2.5 flex items-center gap-2">
             <button
               type="button"
-              onClick={handleBallClick}
-              className="rounded-lg bg-rose-500/20 px-2.5 py-1 text-[11px] font-medium text-rose-200 hover:bg-rose-500/30"
+              onClick={handleBallTrigger}
+              className="rounded bg-rose-500/20 px-2 py-1 text-[10px] font-medium text-rose-200 hover:bg-rose-500/30"
             >
               Retry
             </button>
@@ -250,29 +353,31 @@ export const OverlayView: React.FC<OverlayViewProps> = ({
                 openNativeSettingsWindow();
                 onOpenSettings?.();
               }}
-              className="rounded-lg bg-indigo-500 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-indigo-600"
+              className="rounded bg-indigo-600 px-2.5 py-1 text-[10px] font-medium text-white hover:bg-indigo-500"
             >
-              Sign In / Settings
+              Configure Provider
             </button>
           </div>
         </div>
       )}
 
       {result && !loading && (
-        <div className="space-y-2">
-          {result.suggestions.map((item, idx) => (
-            <SuggestionCard
-              key={item.style}
-              item={item}
-              index={idx}
-              originalText={result.originalText}
-              showWordDiff={showDiff}
-              onSelectReplace={handleApplySuggestion}
-            />
-          ))}
+        <div className="flex flex-col flex-1 min-h-0">
+          <div className="space-y-1.5 overflow-y-auto max-h-[355px] pr-1 custom-scrollbar">
+            {result.suggestions.map((item, idx) => (
+              <SuggestionCard
+                key={`${item.style}-${idx}`}
+                item={item}
+                index={idx}
+                originalText={result.originalText}
+                showWordDiff={showDiff}
+                onSelectReplace={handleApplySuggestion}
+              />
+            ))}
+          </div>
 
-          <div className="flex items-center justify-between pt-1 text-[11px] text-slate-400">
-            <span>Click a card or press 1, 2, 3 to replace in-place</span>
+          <div className="flex items-center justify-between pt-2 text-[10px] text-slate-500 select-none shrink-0 border-t border-white/[0.04] mt-1.5">
+            <span>Press 1, 2, or 3 to replace in-place</span>
             <span>Esc to close</span>
           </div>
         </div>

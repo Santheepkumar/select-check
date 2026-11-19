@@ -1,4 +1,4 @@
-import { DEFAULT_BLOCKED_APPS, type AppSettings } from '@select-check/shared';
+import { DEFAULT_APP_SETTINGS, DEFAULT_BLOCKED_APPS, type AppSettings } from '@select-check/shared';
 
 const STORAGE_KEY = 'select_check_settings_v1';
 
@@ -18,7 +18,12 @@ export function loadLocalSettings(): AppSettings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
-      return { ...getDefaultSettings(), ...JSON.parse(raw) };
+      const parsed = JSON.parse(raw);
+      // Migrate old dev localhost URL to production cloudflare URL
+      if (parsed.apiUrl && parsed.apiUrl.includes('localhost:8787')) {
+        parsed.apiUrl = DEFAULT_APP_SETTINGS.apiUrl;
+      }
+      return { ...getDefaultSettings(), ...parsed };
     }
   } catch {
     // ignore storage errors
@@ -28,12 +33,7 @@ export function loadLocalSettings(): AppSettings {
 
 export function getDefaultSettings(): AppSettings {
   return {
-    autoShowOnSelect: true,
-    autoHideSeconds: 4,
-    showWordDiff: true,
-    globalShortcut: 'CommandOrControl+Shift+G',
-    blockedApps: [...DEFAULT_BLOCKED_APPS],
-    apiUrl: 'http://localhost:8787',
+    ...DEFAULT_APP_SETTINGS,
     deviceId: getOrCreateDeviceId()
   };
 }
