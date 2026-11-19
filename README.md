@@ -35,14 +35,18 @@ To understand the application inch by inch, browse the [`docs/`](./docs/README.m
 # 1. Install workspace dependencies
 pnpm install
 
-# 2. Start the Serverless Edge API on http://localhost:8787
-# (Optional: export OPENAI_API_KEY="sk-..." for live OpenAI calls)
+# 2. Environment Variables (direnv configured)
+# Simply edit .env with your keys (or copy from .env.example)
+# direnv automatically loads .env whenever you enter the folder:
+direnv allow
+
+# 3. Start the Serverless Edge API on http://localhost:8787
 pnpm dev:api
 
-# 3. Start the Desktop UI / Interactive OS Simulator on http://localhost:5173
+# 4. Start the Desktop UI / Interactive OS Simulator on http://localhost:5173
 pnpm dev:desktop
 
-# 4. Run the Native Tauri v2 Desktop App (requires Rust/Cargo)
+# 5. Run the Native Tauri v2 Desktop App (requires Rust/Cargo)
 pnpm tauri:dev
 ```
 
