@@ -21,6 +21,16 @@ pub fn apply_macos_transparency(win: &tauri::WebviewWindow) {
             // NSWindowCollectionBehaviorCanJoinAllSpaces (1 << 0) | NSWindowCollectionBehaviorFullScreenAuxiliary (1 << 8)
             let behavior: usize = (1 << 0) | (1 << 8);
             let _: () = msg_send![ns_window, setCollectionBehavior: behavior];
+
+            // NSWindowStyleMaskNonactivatingPanel = 1 << 7 (128)
+            // Ensures the floating ball never steals focus or activates SelectCheck over user editor
+            let current_mask: usize = msg_send![ns_window, styleMask];
+            let non_activating_mask: usize = current_mask | (1 << 7);
+            let _: () = msg_send![ns_window, setStyleMask: non_activating_mask];
+
+            // Floating level 25 (NSStatusWindowLevel) so the ball stays on top of application windows
+            let _: () = msg_send![ns_window, setLevel: 25isize];
+            let _: () = msg_send![ns_window, setHidesOnDeactivate: NO];
         }
     }
 
@@ -145,6 +155,7 @@ const BALL_SIZE: f64 = 48.0;
 const CARD_WIDTH: f64 = 392.0;
 const CARD_HEIGHT: f64 = 520.0;
 
+#[allow(unexpected_cfgs)]
 pub fn show_ball_at(app: &AppHandle, x: f64, y: f64) -> Result<(), String> {
     if let Some(win) = app.get_webview_window("overlay") {
         let bounds = get_monitor_for_point(app, x, y);
@@ -159,6 +170,18 @@ pub fn show_ball_at(app: &AppHandle, x: f64, y: f64) -> Result<(), String> {
         let _ = win.show();
         let _ = win.set_shadow(false);
         apply_macos_transparency(&win);
+
+        #[cfg(target_os = "macos")]
+        {
+            use cocoa::base::id;
+            use objc::{msg_send, sel, sel_impl};
+            if let Ok(ns_win_ptr) = win.ns_window() {
+                let ns_window = ns_win_ptr as id;
+                unsafe {
+                    let _: () = msg_send![ns_window, orderFrontRegardless];
+                }
+            }
+        }
 
         if let Some(state) = app.try_state::<crate::SharedState>() {
             if let Ok(mut st) = state.lock() {
