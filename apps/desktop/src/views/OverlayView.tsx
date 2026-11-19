@@ -72,6 +72,7 @@ export const OverlayView: React.FC<OverlayViewProps> = ({
   const handleClose = useCallback(async () => {
     isTriggeringRef.current = false;
     setMode('ball');
+    setSelectedText('');
     setResult(null);
     setError(null);
     await dismissNativeOverlay();
@@ -134,6 +135,7 @@ export const OverlayView: React.FC<OverlayViewProps> = ({
       listen('overlay-dismissed', () => {
         isTriggeringRef.current = false;
         setMode('ball');
+        setSelectedText('');
         setResult(null);
         setError(null);
       }).then((fn) => {
