@@ -1,6 +1,7 @@
 use active_win_pos_rs::get_active_window;
 use arboard::Clipboard;
-use enigo::{Direction, Enigo, Key, Keyboard, Settings as EnigoSettings};
+#[cfg(not(target_os = "macos"))]
+use enigo::{Direction, Enigo, Key, Settings as EnigoSettings};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -161,6 +162,24 @@ pub fn is_selection_eligible(text: &str, skip_code_and_numbers: bool) -> bool {
     true
 }
 
+#[cfg(target_os = "macos")]
+pub fn get_live_cursor_location() -> (f64, f64) {
+    use core_graphics::event::CGEvent;
+    use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
+    if let Ok(source) = CGEventSource::new(CGEventSourceStateID::CombinedSessionState) {
+        if let Ok(event) = CGEvent::new(source) {
+            let loc = event.location();
+            return (loc.x, loc.y);
+        }
+    }
+    (0.0, 0.0)
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn get_live_cursor_location() -> (f64, f64) {
+    (0.0, 0.0)
+}
+
 /// Extracts currently selected text while preserving the user's existing clipboard contents
 pub fn capture_selected_text_safely(skip_code_and_numbers: bool) -> Option<String> {
     let mut clipboard = Clipboard::new().ok()?;
@@ -169,25 +188,37 @@ pub fn capture_selected_text_safely(skip_code_and_numbers: bool) -> Option<Strin
     // Clear clipboard sentinel so we know if the simulated Copy actually copied new selected text
     let _ = clipboard.set_text(String::new());
 
-    if let Ok(mut enigo) = Enigo::new(&EnigoSettings::default()) {
-        #[cfg(target_os = "macos")]
-        let modifier = Key::Meta;
-        #[cfg(not(target_os = "macos"))]
-        let modifier = Key::Control;
+    #[cfg(target_os = "macos")]
+    {
+        use core_graphics::event::{CGEvent, CGEventFlags, CGEventTapLocation};
+        use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
+        // Brief pause to allow host application selection state to settle
+        thread::sleep(Duration::from_millis(50));
 
-        // On macOS, Key::Unicode('c') triggers Carbon TSM layout resolution which crashes
-        // background threads. Key::Other(8) directly uses raw virtual keycode kVK_ANSI_C (8).
-        #[cfg(target_os = "macos")]
-        let c_key = Key::Other(8);
-        #[cfg(not(target_os = "macos"))]
-        let c_key = Key::Unicode('c');
-
-        let _ = enigo.key(modifier, Direction::Press);
-        let _ = enigo.key(c_key, Direction::Click);
-        let _ = enigo.key(modifier, Direction::Release);
+        if let Ok(source) = CGEventSource::new(CGEventSourceStateID::CombinedSessionState) {
+            // Keycode 8 is kVK_ANSI_C ('c')
+            if let Ok(event_down) = CGEvent::new_keyboard_event(source.clone(), 8, true) {
+                // STRICTLY set flags to Command only (removes any hardware Shift/Option the user is holding!)
+                event_down.set_flags(CGEventFlags::CGEventFlagCommand);
+                event_down.post(CGEventTapLocation::HID);
+            }
+            if let Ok(event_up) = CGEvent::new_keyboard_event(source, 8, false) {
+                event_up.set_flags(CGEventFlags::CGEventFlagCommand);
+                event_up.post(CGEventTapLocation::HID);
+            }
+        }
     }
 
-    thread::sleep(Duration::from_millis(55));
+    #[cfg(not(target_os = "macos"))]
+    {
+        if let Ok(mut enigo) = Enigo::new(&EnigoSettings::default()) {
+            let _ = enigo.key(Key::Control, Direction::Press);
+            let _ = enigo.key(Key::Unicode('c'), Direction::Click);
+            let _ = enigo.key(Key::Control, Direction::Release);
+        }
+    }
+
+    thread::sleep(Duration::from_millis(60));
 
     let captured = clipboard.get_text().ok().map(|s| s.trim().to_string());
 
@@ -419,12 +450,28 @@ pub fn start_selection_listener(app_handle: AppHandle, state: SharedState) {
                             let has_cmd = flags.contains(CGEventFlags::CGEventFlagCommand);
 
                             if is_arrow && has_shift {
-                                // Shift + Arrow keys: extending text selection
-                                let pos = if tr.last_pos != (0.0, 0.0) { tr.last_pos } else { current_pos };
+                                // Shift + Arrow keys (or Cmd+Shift+Arrow / Option+Shift+Arrow): extending text selection
+                                let live_loc = get_live_cursor_location();
+                                let pos = if live_loc != (0.0, 0.0) {
+                                    live_loc
+                                } else if tr.last_pos != (0.0, 0.0) {
+                                    tr.last_pos
+                                } else {
+                                    current_pos
+                                };
+                                tr.last_pos = pos;
                                 trigger_selection_check(pos.0, pos.1, &app_handle_clone, &state_clone);
                             } else if keycode == 0 && has_cmd {
                                 // Cmd + A: Select All text
-                                let pos = if tr.last_pos != (0.0, 0.0) { tr.last_pos } else { current_pos };
+                                let live_loc = get_live_cursor_location();
+                                let pos = if live_loc != (0.0, 0.0) {
+                                    live_loc
+                                } else if tr.last_pos != (0.0, 0.0) {
+                                    tr.last_pos
+                                } else {
+                                    current_pos
+                                };
+                                tr.last_pos = pos;
                                 trigger_selection_check(pos.0, pos.1, &app_handle_clone, &state_clone);
                             } else if (is_arrow && !has_shift) || keycode == 53 {
                                 // Plain arrow key or Escape without Shift clears selection -> dismiss overlay!
@@ -556,6 +603,55 @@ mod tests {
         let (x, y) = clamp_to_screen(1900.0, 1050.0, 380.0, 320.0, 1920.0, 1080.0);
         assert_eq!(x, 1920.0 - 380.0 - 12.0);
         assert_eq!(y, 1080.0 - 320.0 - 24.0);
+    }
+
+    #[test]
+    fn test_clamp_to_monitor_multi_display() {
+        use crate::overlay::{clamp_to_monitor, MonitorBounds};
+
+        // Primary display (0, 0, 1440, 900)
+        let primary = MonitorBounds {
+            origin_x: 0.0,
+            origin_y: 0.0,
+            width: 1440.0,
+            height: 900.0,
+            scale_factor: 2.0,
+        };
+        let (px, py) = clamp_to_monitor(200.0, 300.0, 48.0, 48.0, &primary);
+        assert_eq!((px, py), (200.0, 300.0));
+
+        // External display to the right (1440, 0, 1920, 1080)
+        let ext_right = MonitorBounds {
+            origin_x: 1440.0,
+            origin_y: 0.0,
+            width: 1920.0,
+            height: 1080.0,
+            scale_factor: 1.0,
+        };
+        let (rx, ry) = clamp_to_monitor(2500.0, 500.0, 48.0, 48.0, &ext_right);
+        assert_eq!((rx, ry), (2500.0, 500.0));
+
+        // External display to the left (-1920, 0, 1920, 1080)
+        let ext_left = MonitorBounds {
+            origin_x: -1920.0,
+            origin_y: 0.0,
+            width: 1920.0,
+            height: 1080.0,
+            scale_factor: 1.0,
+        };
+        let (lx, ly) = clamp_to_monitor(-500.0, 400.0, 48.0, 48.0, &ext_left);
+        assert_eq!((lx, ly), (-500.0, 400.0));
+
+        // External display above (0, -1080, 1920, 1080)
+        let ext_above = MonitorBounds {
+            origin_x: 0.0,
+            origin_y: -1080.0,
+            width: 1920.0,
+            height: 1080.0,
+            scale_factor: 1.0,
+        };
+        let (ax, ay) = clamp_to_monitor(500.0, -300.0, 48.0, 48.0, &ext_above);
+        assert_eq!((ax, ay), (500.0, -300.0));
     }
 
     #[test]
