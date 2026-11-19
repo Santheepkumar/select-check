@@ -157,100 +157,106 @@ const CARD_HEIGHT: f64 = 520.0;
 
 #[allow(unexpected_cfgs)]
 pub fn show_ball_at(app: &AppHandle, x: f64, y: f64) -> Result<(), String> {
-    if let Some(win) = app.get_webview_window("overlay") {
-        let bounds = get_monitor_for_point(app, x, y);
-        let (clamped_x, clamped_y) =
-            clamp_to_monitor(x, y, BALL_SIZE, BALL_SIZE, &bounds);
+    if let Some(state) = app.try_state::<crate::SharedState>() {
+        if let Ok(mut st) = state.lock() {
+            st.overlay_mode = "ball".to_string();
+        }
+    }
 
-        let _ = win.set_shadow(false);
-        let _ = win.set_size(Size::Logical(LogicalSize::new(BALL_SIZE, BALL_SIZE)));
-        let _ = win.set_position(Position::Logical(LogicalPosition::new(
-            clamped_x, clamped_y,
-        )));
-        let _ = win.show();
-        let _ = win.set_shadow(false);
-        apply_macos_transparency(&win);
+    let app_handle = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        if let Some(win) = app_handle.get_webview_window("overlay") {
+            let bounds = get_monitor_for_point(&app_handle, x, y);
+            let (clamped_x, clamped_y) =
+                clamp_to_monitor(x, y, BALL_SIZE, BALL_SIZE, &bounds);
 
-        #[cfg(target_os = "macos")]
-        {
-            use cocoa::base::id;
-            use objc::{msg_send, sel, sel_impl};
-            if let Ok(ns_win_ptr) = win.ns_window() {
-                let ns_window = ns_win_ptr as id;
-                unsafe {
-                    let _: () = msg_send![ns_window, orderFrontRegardless];
+            let _ = win.set_shadow(false);
+            let _ = win.set_size(Size::Logical(LogicalSize::new(BALL_SIZE, BALL_SIZE)));
+            let _ = win.set_position(Position::Logical(LogicalPosition::new(
+                clamped_x, clamped_y,
+            )));
+            let _ = win.show();
+            let _ = win.set_shadow(false);
+            apply_macos_transparency(&win);
+
+            #[cfg(target_os = "macos")]
+            {
+                use cocoa::base::id;
+                use objc::{msg_send, sel, sel_impl};
+                if let Ok(ns_win_ptr) = win.ns_window() {
+                    let ns_window = ns_win_ptr as id;
+                    unsafe {
+                        let _: () = msg_send![ns_window, orderFrontRegardless];
+                    }
                 }
             }
         }
-
-        if let Some(state) = app.try_state::<crate::SharedState>() {
-            if let Ok(mut st) = state.lock() {
-                st.overlay_mode = "ball".to_string();
-            }
-        }
-    }
+    });
     Ok(())
 }
 
 #[tauri::command]
 pub fn expand_overlay(app: AppHandle) -> Result<(), String> {
-    if let Some(win) = app.get_webview_window("overlay") {
-        if let Some(state) = app.try_state::<crate::SharedState>() {
-            if let Ok(mut st) = state.lock() {
-                st.overlay_mode = "card".to_string();
-            }
+    if let Some(state) = app.try_state::<crate::SharedState>() {
+        if let Ok(mut st) = state.lock() {
+            st.overlay_mode = "card".to_string();
         }
+    }
 
-        let physical_pos = win.outer_position().unwrap_or_default();
-        // Determine which monitor currently contains this window
-        let bounds = {
-            let mut found: Option<MonitorBounds> = None;
-            if let Ok(monitors) = app.available_monitors() {
-                for monitor in &monitors {
-                    let m_pos = monitor.position();
-                    let m_size = monitor.size();
-                    if physical_pos.x >= m_pos.x
-                        && physical_pos.x < (m_pos.x + m_size.width as i32)
-                        && physical_pos.y >= m_pos.y
-                        && physical_pos.y < (m_pos.y + m_size.height as i32)
-                    {
-                        let scale = monitor.scale_factor();
-                        found = Some(MonitorBounds {
-                            origin_x: m_pos.x as f64 / scale,
-                            origin_y: m_pos.y as f64 / scale,
-                            width: m_size.width as f64 / scale,
-                            height: m_size.height as f64 / scale,
-                            scale_factor: scale,
-                        });
-                        break;
+    let app_handle = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        if let Some(win) = app_handle.get_webview_window("overlay") {
+            let physical_pos = win.outer_position().unwrap_or_default();
+            // Determine which monitor currently contains this window
+            let bounds = {
+                let mut found: Option<MonitorBounds> = None;
+                if let Ok(monitors) = app_handle.available_monitors() {
+                    for monitor in &monitors {
+                        let m_pos = monitor.position();
+                        let m_size = monitor.size();
+                        if physical_pos.x >= m_pos.x
+                            && physical_pos.x < (m_pos.x + m_size.width as i32)
+                            && physical_pos.y >= m_pos.y
+                            && physical_pos.y < (m_pos.y + m_size.height as i32)
+                        {
+                            let scale = monitor.scale_factor();
+                            found = Some(MonitorBounds {
+                                origin_x: m_pos.x as f64 / scale,
+                                origin_y: m_pos.y as f64 / scale,
+                                width: m_size.width as f64 / scale,
+                                height: m_size.height as f64 / scale,
+                                scale_factor: scale,
+                            });
+                            break;
+                        }
                     }
                 }
+                found.unwrap_or_else(|| {
+                    get_monitor_for_point(&app_handle, physical_pos.x as f64, physical_pos.y as f64)
+                })
+            };
+
+            let logical_x = physical_pos.x as f64 / bounds.scale_factor;
+            let mut logical_y = physical_pos.y as f64 / bounds.scale_factor;
+
+            // Smart flip: If near bottom of the monitor, flip card upwards so it stays completely in view
+            if logical_y + CARD_HEIGHT > bounds.origin_y + bounds.height - 20.0 {
+                logical_y = (logical_y - CARD_HEIGHT + BALL_SIZE).max(bounds.origin_y + 24.0);
             }
-            found.unwrap_or_else(|| {
-                get_monitor_for_point(&app, physical_pos.x as f64, physical_pos.y as f64)
-            })
-        };
 
-        let logical_x = physical_pos.x as f64 / bounds.scale_factor;
-        let mut logical_y = physical_pos.y as f64 / bounds.scale_factor;
+            let (clamped_x, clamped_y) =
+                clamp_to_monitor(logical_x, logical_y, CARD_WIDTH, CARD_HEIGHT, &bounds);
 
-        // Smart flip: If near bottom of the monitor, flip card upwards so it stays completely in view
-        if logical_y + CARD_HEIGHT > bounds.origin_y + bounds.height - 20.0 {
-            logical_y = (logical_y - CARD_HEIGHT + BALL_SIZE).max(bounds.origin_y + 24.0);
+            let _ = win.set_shadow(false);
+            let _ = win.set_size(Size::Logical(LogicalSize::new(CARD_WIDTH, CARD_HEIGHT)));
+            let _ = win.set_position(Position::Logical(LogicalPosition::new(
+                clamped_x, clamped_y,
+            )));
+            let _ = win.set_shadow(false);
+            apply_macos_transparency(&win);
+            let _ = win.set_focus();
         }
-
-        let (clamped_x, clamped_y) =
-            clamp_to_monitor(logical_x, logical_y, CARD_WIDTH, CARD_HEIGHT, &bounds);
-
-        let _ = win.set_shadow(false);
-        let _ = win.set_size(Size::Logical(LogicalSize::new(CARD_WIDTH, CARD_HEIGHT)));
-        let _ = win.set_position(Position::Logical(LogicalPosition::new(
-            clamped_x, clamped_y,
-        )));
-        let _ = win.set_shadow(false);
-        apply_macos_transparency(&win);
-        let _ = win.set_focus();
-    }
+    });
     Ok(())
 }
 
@@ -296,14 +302,17 @@ pub fn dismiss_overlay_window(app: &AppHandle) -> Result<(), String> {
             st.overlay_mode = "hidden".to_string();
         }
     }
-    if let Some(win) = app.get_webview_window("overlay") {
-        let _ = win.hide();
-        let _ = win.set_shadow(false);
-        let _ = win.set_size(Size::Logical(LogicalSize::new(BALL_SIZE, BALL_SIZE)));
-        apply_macos_transparency(&win);
-        use tauri::Emitter;
-        let _ = app.emit("overlay-dismissed", ());
-    }
+    let app_handle = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        if let Some(win) = app_handle.get_webview_window("overlay") {
+            let _ = win.hide();
+            let _ = win.set_shadow(false);
+            let _ = win.set_size(Size::Logical(LogicalSize::new(BALL_SIZE, BALL_SIZE)));
+            apply_macos_transparency(&win);
+            use tauri::Emitter;
+            let _ = app_handle.emit("overlay-dismissed", ());
+        }
+    });
     Ok(())
 }
 
@@ -314,9 +323,12 @@ pub fn dismiss_overlay(app: AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 pub fn open_settings_window(app: AppHandle) -> Result<(), String> {
-    if let Some(win) = app.get_webview_window("settings") {
-        let _ = win.show();
-        let _ = win.set_focus();
-    }
+    let app_handle = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        if let Some(win) = app_handle.get_webview_window("settings") {
+            let _ = win.show();
+            let _ = win.set_focus();
+        }
+    });
     Ok(())
 }
