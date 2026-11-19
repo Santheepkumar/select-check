@@ -3325,9 +3325,11 @@ version = "0.1.0"
 dependencies = [
  "active-win-pos-rs",
  "arboard",
+ "cocoa",
  "core-foundation 0.9.4",
  "core-graphics 0.23.2",
  "enigo",
+ "objc",
  "rdev",
  "serde",
  "serde_json",

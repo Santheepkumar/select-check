@@ -186,6 +186,7 @@ pub fn run() {
             let handle: AppHandle = app.handle().clone();
             if let Some(overlay_win) = app.get_webview_window("overlay") {
                 let _ = overlay_win.set_shadow(false);
+                overlay::apply_macos_transparency(&overlay_win);
             }
             let _ = setup_system_tray(&handle, Arc::clone(&shared_state));
             start_selection_listener(handle, Arc::clone(&shared_state));
