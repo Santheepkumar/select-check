@@ -40,10 +40,11 @@ pnpm install
 # direnv automatically loads .env whenever you enter the folder:
 direnv allow
 
-# 3. Start the Serverless Edge API on http://localhost:8787
+# 3. (Optional) Run the local Hono Edge API on http://localhost:8787
 pnpm dev:api
 
 # 4. Start the Desktop UI / Interactive OS Simulator on http://localhost:5173
+# (Automatically connects to live edge: https://select-check-api.santheepkumar.workers.dev)
 pnpm dev:desktop
 
 # 5. Run the Native Tauri v2 Desktop App (requires Rust/Cargo)
@@ -56,7 +57,7 @@ pnpm tauri:dev
 
 | Command | Description |
 | :--- | :--- |
-| `pnpm dev:api` | Start the local Hono edge backend server on `http://localhost:8787` |
+| `pnpm dev:api` | Start the local Hono edge dev server on `http://localhost:8787` (Production: `https://select-check-api.santheepkumar.workers.dev`) |
 | `pnpm dev:desktop` | Start the Vite desktop frontend & multi-app simulator on `http://localhost:5173` |
 | `pnpm dev:mobile` | Start the WhatsApp-themed mobile webapp & simulator on `http://localhost:5174` |
 | `pnpm tauri:dev` | Build and run the native Tauri v2 desktop overlay & system tray app |

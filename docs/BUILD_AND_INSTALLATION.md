@@ -10,7 +10,7 @@ SelectCheck connects to the Cloudflare Edge API proxy for text checks, quota tra
 
 ### Production Backend URL
 ```
-http://localhost:8787
+https://select-check-api.santheepkumar.workers.dev
 ```
 
 ### Configured Locations:
@@ -18,13 +18,13 @@ http://localhost:8787
    ```typescript
    export const DEFAULT_APP_SETTINGS: AppSettings = {
      ...
-     apiUrl: 'http://localhost:8787',
+     apiUrl: 'https://select-check-api.santheepkumar.workers.dev',
      ...
    };
    ```
 2. **Rust Core State**: `apps/desktop/src-tauri/src/lib.rs`
    ```rust
-   api_url: "http://localhost:8787".to_string(),
+   api_url: "https://select-check-api.santheepkumar.workers.dev".to_string(),
    ```
 3. **Desktop Local Storage Migration**: `apps/desktop/src/services/tauriBridge.ts`
    Automatically upgrades any cached `localhost:8787` to the Cloudflare URL upon app startup.

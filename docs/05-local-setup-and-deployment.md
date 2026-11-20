@@ -38,7 +38,7 @@ pnpm install
 
 ---
 
-### Step 2: Start the Serverless Backend (`http://localhost:8787`)
+### Step 2: Start the Serverless Backend (`https://select-check-api.santheepkumar.workers.dev`)
 
 Open Terminal 1 and start the local Hono edge server:
 
@@ -58,7 +58,7 @@ pnpm dev:api
 
 Verify the API is healthy:
 ```bash
-curl http://localhost:8787/health
+curl https://select-check-api.santheepkumar.workers.dev/health
 # {"status":"ok","service":"select-check-api","timestamp":"..."}
 ```
 
@@ -79,7 +79,7 @@ Open **`http://localhost:5173`** in your browser:
 1. Choose an active simulated OS window (**Slack**, **Apple Mail / Outlook**, or **Terminal**).
 2. Highlight any text in the editor (or click **"Select Sample Sentence"**).
 3. The **Floating Ball** appears next to your cursor.
-4. Click the **Floating Ball** to fetch the **Top 3 Suggestions** (`Grammar Fix`, `Clear & Concise`, `Professional & Polished`) from `http://localhost:8787/v1/check`.
+4. Click the **Floating Ball** to fetch the **Top 3 Suggestions** (`Grammar Fix`, `Clear & Concise`, `Professional & Polished`) from `https://select-check-api.santheepkumar.workers.dev/v1/check`.
 5. Toggle **Diff** to inspect word-level additions/deletions, click **Copy** to copy only, or click a card (or press `1`, `2`, `3`) to **replace the selected text in-place**.
 6. Click **Settings & Quota** in the top bar to test passwordless Email OTP sign-in (use code `123456` in dev mode to upgrade from `10/day` to `100/day`) or edit the **Blocked Applications** list.
 
@@ -160,6 +160,9 @@ pnpm build
    ```bash
    pnpm --filter @select-check/api deploy
    ```
+   Live Production API: `https://select-check-api.santheepkumar.workers.dev`
+
+> For an in-depth, reusable guide on deploying Cloudflare Workers with KV, D1, CI/CD, and troubleshooting real-world issues, see the **[Universal Cloudflare Deployment Playbook](./CLOUDFLARE_DEPLOYMENT_GUIDE.md)**.
 
 ### 4.2 Building Cross-Platform Desktop Installers (`apps/desktop`)
 

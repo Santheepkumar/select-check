@@ -13,6 +13,8 @@ Welcome to the complete technical documentation for **SelectCheck** — a cross-
 | **[03. Desktop Frontend UI & Diff Engine](./03-desktop-frontend-ui.md)** | Deep dive into `apps/desktop/src`: window routing (`overlay`, `settings`, `InteractiveWorkspace`), `FloatingBall`, `SuggestionCard`, the LCS word-level diff algorithm (`diff.ts`), and the dual Tauri/Browser bridge. |
 | **[04. Serverless Edge API & OpenAI Integration](./04-backend-edge-api.md)** | Complete guide to `apps/api`: Hono routes, OpenAI `gpt-4o-mini` Structured Outputs JSON schema, local heuristic fallback, daily quota enforcement (`10/day` free device vs `100/day` signed-in), and Email OTP auth. |
 | **[05. Local Setup, Testing & Deployment Guide](./05-local-setup-and-deployment.md)** | Step-by-step instructions to install prerequisites on macOS/Windows/Linux, run the API & desktop app locally, configure OpenAI/Supabase keys, run tests, and build production binaries. |
+| **[Cloudflare Deployment Playbook](./CLOUDFLARE_DEPLOYMENT_GUIDE.md)** | Universal, step-by-step master guide for deploying serverless edge APIs on Cloudflare Workers (Hono, Wrangler, KV, D1, Secrets, CI/CD, and troubleshooting). |
+| **[How to Redeploy the API](./HOW_TO_REDEPLOY_API.md)** | Quick, step-by-step developer workflow for making code changes, testing locally, deploying updates to production, watching live logs with `wrangler tail`, and rolling back. |
 
 ---
 

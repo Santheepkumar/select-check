@@ -116,4 +116,4 @@ When running `pnpm dev:desktop` in a browser (`http://localhost:5173`), `Interac
 - **Apple Mail / Outlook** (pre-loaded with a wordy business email)
 - **Terminal** (included in the default **App Blocklist** so you can verify that selecting text inside a blocked app suppresses the floating ball)
 
-Selecting any text inside the unblocked editors positions `OverlayView` right next to your mouse cursor, calls the live backend API (`http://localhost:8787/v1/check`), and replaces the highlighted substring directly inside the `<textarea>` when you pick a suggestion.
+Selecting any text inside the unblocked editors positions `OverlayView` right next to your mouse cursor, calls the live backend API (`https://select-check-api.santheepkumar.workers.dev/v1/check`), and replaces the highlighted substring directly inside the `<textarea>` when you pick a suggestion.
