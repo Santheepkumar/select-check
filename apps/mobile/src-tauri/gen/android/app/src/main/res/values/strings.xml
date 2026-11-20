@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">"SelectCheck"</string>
+    <string name="main_activity_title">"SelectCheck"</string>
+    <string name="accessibility_service_description">"SelectCheck monitors selected text in apps like WhatsApp to display grammar and rewrite suggestions."</string>
+</resources>

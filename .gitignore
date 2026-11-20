@@ -10,5 +10,6 @@ dist/
 target/
 *.log
 *.dmg
+*.apk
 .DS_Store
 skills/
