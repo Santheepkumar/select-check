@@ -67,7 +67,7 @@ impl Default for DesktopSettings {
                 "Warp".to_string(),
                 "WindowsTerminal".to_string(),
             ],
-            api_url: "https://run-interpreted-framing-rural.trycloudflare.com".to_string(),
+            api_url: "http://localhost:8787".to_string(),
             device_id: "dev_local_desktop".to_string(),
             auth_token: None,
             user_email: None,
@@ -114,7 +114,10 @@ fn get_settings(state: State<'_, SharedState>) -> Result<DesktopSettings, String
 }
 
 #[tauri::command]
-fn save_settings(state: State<'_, SharedState>, settings: DesktopSettings) -> Result<DesktopSettings, String> {
+fn save_settings(
+    state: State<'_, SharedState>,
+    settings: DesktopSettings,
+) -> Result<DesktopSettings, String> {
     let mut st = state.lock().map_err(|_| "State lock poisoned")?;
     st.settings = settings.clone();
     Ok(settings)

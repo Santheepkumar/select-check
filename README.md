@@ -58,7 +58,9 @@ pnpm tauri:dev
 | :--- | :--- |
 | `pnpm dev:api` | Start the local Hono edge backend server on `http://localhost:8787` |
 | `pnpm dev:desktop` | Start the Vite desktop frontend & multi-app simulator on `http://localhost:5173` |
+| `pnpm dev:mobile` | Start the WhatsApp-themed mobile webapp & simulator on `http://localhost:5174` |
 | `pnpm tauri:dev` | Build and run the native Tauri v2 desktop overlay & system tray app |
 | `pnpm tauri:build` | Package native OS installers (`.dmg`, `.msi`, `.deb`, `.AppImage`) |
+| `pnpm tauri:mobile:dev` | Run the Tauri v2 mobile app on Android emulator / iOS simulator |
 | `pnpm test` | Run all Vitest unit and integration tests across the monorepo |
 | `pnpm build` | Run strict TypeScript typechecking and production Vite builds |

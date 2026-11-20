@@ -1,0 +1,100 @@
+@import "tailwindcss";
+
+:root {
+  /* WhatsApp Mobile Palette */
+  --wa-teal: #008069;
+  --wa-teal-dark: #005c4b;
+  --wa-emerald: #00a884;
+  --wa-emerald-light: #25d366;
+  --wa-bg-dark: #0b141a;
+  --wa-surface-dark: #111b21;
+  --wa-panel-dark: #202c33;
+  --wa-bubble-out-dark: #005c4b;
+  --wa-bubble-in-dark: #202c33;
+  --wa-text-primary-dark: #e9edef;
+  --wa-text-secondary-dark: #8696a0;
+  --wa-border-dark: #222e35;
+  --wa-blue-tick: #53bdeb;
+
+  --wa-bg-light: #efeae2;
+  --wa-surface-light: #ffffff;
+  --wa-bubble-out-light: #d9fdd3;
+  --wa-bubble-in-light: #ffffff;
+  --wa-text-primary-light: #111b21;
+  --wa-text-secondary-light: #667781;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 100%;
+}
+
+/* Safe Area Insets for modern bezel-less iPhones and Androids */
+.safe-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* WhatsApp wallpaper doodle background subtle pattern */
+.wa-wallpaper-pattern {
+  background-color: #0b141a;
+  background-image: radial-gradient(rgba(32, 44, 51, 0.45) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+/* Enable text selection on inputs and content */
+input, textarea, [contenteditable="true"] {
+  user-select: text !important;
+}
+
+/* Smooth pop and slide animations */
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-up {
+  animation: slideUp 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(0, 168, 132, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(0, 168, 132, 0);
+  }
+}
+
+.animate-pulse-glow {
+  animation: pulseGlow 2s infinite;
+}
+
+/* Custom mobile scrollbar */
+.mobile-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.mobile-scrollbar::-webkit-scrollbar {
+  display: none;
+}

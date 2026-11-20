@@ -1,0 +1,17 @@
+[package]
+name = "select-check-mobile"
+version = "0.1.0"
+description = "SelectCheck Mobile — WhatsApp Grammar & Rewrite Companion"
+edition = "2021"
+
+[lib]
+name = "select_check_mobile_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.7", features = [] }
+
+[dependencies]
+tauri = { version = "2.12", features = [] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"

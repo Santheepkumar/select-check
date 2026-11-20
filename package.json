@@ -8,8 +8,12 @@
     "test": "pnpm -r test",
     "dev:api": "pnpm --filter @select-check/api dev",
     "dev:desktop": "pnpm --filter @select-check/desktop dev",
+    "dev:mobile": "pnpm --filter @select-check/mobile dev",
     "tauri:dev": "pnpm --filter @select-check/desktop tauri dev",
-    "tauri:build": "pnpm --filter @select-check/desktop tauri build"
+    "tauri:build": "pnpm --filter @select-check/desktop tauri build",
+    "tauri:mobile:dev": "pnpm --filter @select-check/mobile tauri dev",
+    "tauri:mobile:ios": "pnpm --filter @select-check/mobile tauri ios dev",
+    "run:ios": "xcodebuild -project apps/mobile/src-tauri/gen/apple/select-check-mobile.xcodeproj -scheme select-check-mobile_iOS -destination 'platform=iOS Simulator,name=iPhone 16' -configuration debug CODE_SIGN_IDENTITY='' CODE_SIGNING_REQUIRED=NO CODE_SIGN_ENTITLEMENTS='' CODE_SIGNING_ALLOWED=NO -derivedDataPath /tmp/selectcheck-ios build && xcrun simctl install booted /tmp/selectcheck-ios/Build/Products/debug-iphonesimulator/SelectCheck.app && xcrun simctl launch booted com.selectcheck.mobile"
   },
   "engines": {
     "node": ">=20.0.0",

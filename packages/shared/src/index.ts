@@ -159,7 +159,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     'cmd.exe',
     'powershell.exe'
   ],
-  apiUrl: 'https://run-interpreted-framing-rural.trycloudflare.com',
+  apiUrl: 'http://localhost:8787',
   deviceId: 'dev_local_desktop',
   providerType: 'hosted',
   slot3Preset: 'professional_polished',

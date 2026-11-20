@@ -23,7 +23,17 @@ app.get('/health', (c) =>
   })
 );
 
+// Mount routes on /v1, /api, /api/v1, and root / for maximum client compatibility
 app.route('/v1', checkRouter);
 app.route('/v1/auth', authRouter);
+
+app.route('/api/v1', checkRouter);
+app.route('/api/v1/auth', authRouter);
+
+app.route('/api', checkRouter);
+app.route('/api/auth', authRouter);
+
+app.route('/', checkRouter);
+app.route('/auth', authRouter);
 
 export default app;
