@@ -206,7 +206,7 @@ export const MobileSettingsView: React.FC<MobileSettingsViewProps> = ({
                 type="text"
                 value={form.apiUrl || ''}
                 onChange={(e) => setForm({ ...form, apiUrl: e.target.value })}
-                placeholder="http://localhost:8787"
+                placeholder="https://select-check-api.santheepkumar.workers.dev"
                 className="w-full bg-[#111b21] text-xs text-[#e9edef] rounded-xl p-2.5 border border-[#222e35] focus:outline-none focus:border-[#00a884]/50 font-mono"
               />
             </div>
@@ -215,7 +215,7 @@ export const MobileSettingsView: React.FC<MobileSettingsViewProps> = ({
                 type="button"
                 onClick={() => {
                   triggerHaptic('light');
-                  setForm({ ...form, apiUrl: 'http://localhost:8787' });
+                  setForm({ ...form, apiUrl: 'https://select-check-api.santheepkumar.workers.dev' });
                 }}
                 className={`px-2.5 py-1 rounded-lg text-[10px] font-medium border transition-all ${
                   (form.apiUrl || '').includes('localhost') || (form.apiUrl || '').includes('127.0.0.1')
@@ -223,7 +223,7 @@ export const MobileSettingsView: React.FC<MobileSettingsViewProps> = ({
                     : 'bg-[#111b21] border-[#222e35] text-[#8696a0]'
                 }`}
               >
-                Local Server (http://localhost:8787)
+                Local Server (https://select-check-api.santheepkumar.workers.dev)
               </button>
               <button
                 type="button"
@@ -231,16 +231,16 @@ export const MobileSettingsView: React.FC<MobileSettingsViewProps> = ({
                   triggerHaptic('light');
                   setForm({
                     ...form,
-                    apiUrl: 'https://run-interpreted-framing-rural.trycloudflare.com'
+                    apiUrl: 'https://select-check-api.santheepkumar.workers.dev'
                   });
                 }}
                 className={`px-2.5 py-1 rounded-lg text-[10px] font-medium border transition-all ${
-                  !(form.apiUrl || '').includes('localhost') && !(form.apiUrl || '').includes('127.0.0.1')
+                  (form.apiUrl || '').includes('santheepkumar.workers.dev')
                     ? 'bg-[#00a884]/20 border-[#00a884] text-[#00a884]'
                     : 'bg-[#111b21] border-[#222e35] text-[#8696a0]'
                 }`}
               >
-                Cloudflare Tunnel
+                Production Edge Worker
               </button>
             </div>
           </div>

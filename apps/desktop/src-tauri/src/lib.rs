@@ -67,7 +67,7 @@ impl Default for DesktopSettings {
                 "Warp".to_string(),
                 "WindowsTerminal".to_string(),
             ],
-            api_url: "http://localhost:8787".to_string(),
+            api_url: "https://select-check-api.santheepkumar.workers.dev".to_string(),
             device_id: "dev_local_desktop".to_string(),
             auth_token: None,
             user_email: None,

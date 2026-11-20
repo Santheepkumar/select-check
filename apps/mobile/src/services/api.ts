@@ -52,7 +52,7 @@ function resolveProviderConfig(settings: AppSettings): {
 }
 
 export function resolveApiEndpoint(baseUrl: string, path: string): string {
-  const cleanBase = (baseUrl || 'http://localhost:8787').trim().replace(/\/+$/, '');
+  const cleanBase = (baseUrl || 'https://select-check-api.santheepkumar.workers.dev').trim().replace(/\/+$/, '');
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
 
   // If user included /v1 or /api in their baseUrl, avoid duplicate prefixes

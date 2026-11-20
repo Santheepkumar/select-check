@@ -159,7 +159,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     'cmd.exe',
     'powershell.exe'
   ],
-  apiUrl: 'http://localhost:8787',
+  apiUrl: 'https://select-check-api.santheepkumar.workers.dev',
   deviceId: 'dev_local_desktop',
   providerType: 'hosted',
   slot3Preset: 'professional_polished',
