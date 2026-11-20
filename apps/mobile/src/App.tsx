@@ -4,7 +4,8 @@ import {
   type AppSettings,
   type QuotaInfo
 } from '@select-check/shared';
-import { WhatsAppHeader, type MobileTab } from './components/WhatsAppHeader.js';
+import { Header } from './components/Header.js';
+import { BottomNav, type MobileTab } from './components/BottomNav.js';
 import { MainChatView } from './views/MainChatView.js';
 import { HistoryView } from './views/HistoryView.js';
 import { PermissionsGuideView } from './views/PermissionsGuideView.js';
@@ -14,7 +15,7 @@ import { getStoredPermissions, type PermissionStatus } from './services/mobileBr
 const SETTINGS_KEY = 'selectcheck_mobile_settings_v1';
 
 export const App: React.FC = () => {
-  const [currentTab, setCurrentTab] = useState<MobileTab>('chat');
+  const [currentTab, setCurrentTab] = useState<MobileTab>('refine');
   const [settings, setSettings] = useState<AppSettings>(() => {
     try {
       const raw = localStorage.getItem(SETTINGS_KEY);
@@ -34,8 +35,26 @@ export const App: React.FC = () => {
     resetsAt: new Date(Date.now() + 86400000).toISOString()
   });
 
-  useEffect(() => {
+  const refreshPerms = () => {
     setPermissions(getStoredPermissions());
+  };
+
+  useEffect(() => {
+    refreshPerms();
+
+    // Attach global listener for app resume from Android native settings
+    window.__SELECTCHECK_REFRESH_PERMS__ = refreshPerms;
+
+    // Switch to refine tab if incoming text arrives
+    const handleIncoming = () => {
+      setCurrentTab('refine');
+    };
+    window.addEventListener('selectcheck:incoming-text', handleIncoming);
+
+    return () => {
+      window.removeEventListener('selectcheck:incoming-text', handleIncoming);
+      window.__SELECTCHECK_REFRESH_PERMS__ = undefined;
+    };
   }, []);
 
   const handleSaveSettings = (newSettings: AppSettings) => {
@@ -54,26 +73,27 @@ export const App: React.FC = () => {
     }));
   };
 
-  const isBackgroundActive =
-    permissions.overlayGranted && permissions.accessibilityGranted;
+  const isBackgroundActive = permissions.accessibilityGranted;
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-[#0b141a] text-[#e9edef] overflow-hidden select-none font-sans">
-      {/* WhatsApp Emerald Brand Header */}
-      <WhatsAppHeader
+    <div className="flex flex-col h-screen w-screen bg-[#090e11] text-[#e9edef] overflow-hidden select-none font-sans">
+      {/* Top Header */}
+      <Header
         currentTab={currentTab}
-        onSelectTab={setCurrentTab}
         quota={quota}
-        activePreset={settings.slot3Preset}
         isBackgroundActive={isBackgroundActive}
+        onOpenPermissions={() => setCurrentTab('permissions')}
       />
 
-      {/* Main View Area */}
+      {/* Main Screen Body */}
       <main className="flex-1 flex flex-col overflow-hidden relative">
-        {currentTab === 'chat' && (
+        {currentTab === 'refine' && (
           <MainChatView
             settings={settings}
+            onSaveSettings={handleSaveSettings}
             onQuotaUpdated={handleQuotaUpdated}
+            isBackgroundActive={isBackgroundActive}
+            onOpenPermissions={() => setCurrentTab('permissions')}
           />
         )}
 
@@ -91,6 +111,9 @@ export const App: React.FC = () => {
           />
         )}
       </main>
+
+      {/* Bottom Navigation */}
+      <BottomNav currentTab={currentTab} onSelectTab={setCurrentTab} />
     </div>
   );
 };

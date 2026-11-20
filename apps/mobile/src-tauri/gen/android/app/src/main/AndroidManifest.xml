@@ -30,18 +30,25 @@
             </intent-filter>
 
             <!-- Android Text Selection Context Menu Action (PROCESS_TEXT) -->
-            <intent-filter>
+            <intent-filter android:label="Refine with SelectCheck">
                 <action android:name="android.intent.action.PROCESS_TEXT" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+
+            <!-- Android Direct Share / Send Intent Action -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="text/plain" />
             </intent-filter>
         </activity>
 
-        <!-- Persistent Background Accessibility Service: Listens for Text Selection in WhatsApp -->
+        <!-- Persistent Background Accessibility Service: Listens for Text Selection across Apps -->
         <service
             android:name=".SelectCheckAccessibilityService"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
-            android:exported="false">
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.accessibilityservice.AccessibilityService" />
             </intent-filter>
@@ -54,7 +61,11 @@
         <service
             android:name=".FloatingOverlayService"
             android:foregroundServiceType="specialUse"
-            android:exported="false" />
+            android:exported="false">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Floating assistant button for instant text refinement" />
+        </service>
 
         <!-- Device Boot Receiver: Restarts services automatically after phone restart -->
         <receiver

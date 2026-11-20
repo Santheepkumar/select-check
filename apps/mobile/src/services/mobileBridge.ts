@@ -1,30 +1,75 @@
 /**
  * Mobile platform bridge providing native device integrations:
+ * - Direct Android native bridge integration via window.AndroidNative
+ * - Real system permission detection & OS settings launchers
  * - Clipboard management
  * - WhatsApp direct sharing & OS share sheet
  * - Haptic feedback for mobile taps
- * - Android overlay and accessibility service simulation & bridge
+ * - Floating assistant bubble toggle
  */
 
 export interface PermissionStatus {
   overlayGranted: boolean;
   accessibilityGranted: boolean;
   batteryOptimizationsIgnored: boolean;
+  isBubbleRunning?: boolean;
+}
+
+interface AndroidNativeInterface {
+  openAccessibilitySettings: () => void;
+  openOverlaySettings: () => void;
+  openAppDetailsSettings: () => void;
+  isAccessibilityServiceEnabled: () => boolean;
+  canDrawOverlays: () => boolean;
+  toggleFloatingBubble: (enable: boolean) => void;
+  isFloatingBubbleRunning: () => boolean;
+  replaceTextInActiveApp: (newText: string) => boolean;
+}
+
+declare global {
+  interface Window {
+    AndroidNative?: AndroidNativeInterface;
+    __SELECTCHECK_REFRESH_PERMS__?: () => void;
+    __SELECTCHECK_INCOMING_TEXT__?: string;
+  }
 }
 
 const PERMISSIONS_STORAGE_KEY = 'selectcheck_mobile_permissions';
 
+export function isAndroidNativeAvailable(): boolean {
+  return typeof window !== 'undefined' && Boolean(window.AndroidNative);
+}
+
 export function getStoredPermissions(): PermissionStatus {
+  // Check real Android OS permissions if running inside Android WebView
+  if (isAndroidNativeAvailable() && window.AndroidNative) {
+    try {
+      const a11y = window.AndroidNative.isAccessibilityServiceEnabled();
+      const overlay = window.AndroidNative.canDrawOverlays();
+      const bubble = window.AndroidNative.isFloatingBubbleRunning();
+      return {
+        overlayGranted: overlay,
+        accessibilityGranted: a11y,
+        batteryOptimizationsIgnored: true,
+        isBubbleRunning: bubble
+      };
+    } catch (e) {
+      console.warn('Error reading real Android permissions:', e);
+    }
+  }
+
   try {
     const raw = localStorage.getItem(PERMISSIONS_STORAGE_KEY);
     if (raw) return JSON.parse(raw);
   } catch (err) {
     console.error('Failed reading permissions from storage', err);
   }
+
   return {
     overlayGranted: false,
     accessibilityGranted: false,
-    batteryOptimizationsIgnored: false
+    batteryOptimizationsIgnored: false,
+    isBubbleRunning: false
   };
 }
 
@@ -34,6 +79,47 @@ export function savePermissions(perms: PermissionStatus): void {
   } catch (err) {
     console.error('Failed saving permissions', err);
   }
+}
+
+export function openNativeAccessibilitySettings(): void {
+  if (isAndroidNativeAvailable() && window.AndroidNative) {
+    triggerHaptic('medium');
+    window.AndroidNative.openAccessibilitySettings();
+  } else {
+    console.log('Simulating open accessibility settings in browser/iOS');
+  }
+}
+
+export function openNativeOverlaySettings(): void {
+  if (isAndroidNativeAvailable() && window.AndroidNative) {
+    triggerHaptic('medium');
+    window.AndroidNative.openOverlaySettings();
+  } else {
+    console.log('Simulating open overlay settings in browser/iOS');
+  }
+}
+
+export function openNativeAppDetailsSettings(): void {
+  if (isAndroidNativeAvailable() && window.AndroidNative) {
+    triggerHaptic('medium');
+    window.AndroidNative.openAppDetailsSettings();
+  } else {
+    console.log('Simulating open app details settings in browser/iOS');
+  }
+}
+
+export function toggleNativeFloatingBubble(enable: boolean): void {
+  if (isAndroidNativeAvailable() && window.AndroidNative) {
+    triggerHaptic('medium');
+    window.AndroidNative.toggleFloatingBubble(enable);
+  }
+}
+
+export function replaceActiveAppText(newText: string): boolean {
+  if (isAndroidNativeAvailable() && window.AndroidNative) {
+    return window.AndroidNative.replaceTextInActiveApp(newText);
+  }
+  return false;
 }
 
 /**
@@ -96,28 +182,18 @@ export async function shareToWhatsApp(text: string): Promise<boolean> {
         text
       });
       return true;
-    } catch (shareErr) {
-      // If user cancelled, return; otherwise fall back to WhatsApp URL schema
-      if (shareErr instanceof Error && shareErr.name === 'AbortError') {
-        return false;
-      }
+    } catch {
+      // If cancelled or failed, fall through to schema
     }
   }
 
-  // 2. Fall back to direct WhatsApp URL scheme (works on iOS and Android)
-  const whatsappUrl = `whatsapp://send?text=${encodedText}`;
-  const webWhatsAppUrl = `https://api.whatsapp.com/send?text=${encodedText}`;
-
+  // 2. Direct WhatsApp URL schema
   try {
-    window.location.href = whatsappUrl;
-    setTimeout(() => {
-      // If WhatsApp is not installed, open web WhatsApp
-      window.open(webWhatsAppUrl, '_blank');
-    }, 600);
+    window.location.href = `whatsapp://send?text=${encodedText}`;
     return true;
-  } catch (err) {
-    console.error('Failed to open WhatsApp:', err);
-    window.open(webWhatsAppUrl, '_blank');
+  } catch {
+    const webUrl = `https://wa.me/?text=${encodedText}`;
+    window.open(webUrl, '_blank');
     return false;
   }
 }
