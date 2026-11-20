@@ -84,7 +84,11 @@ authRouter.post('/verify', async (c) => {
     pendingOtpMap.delete(email);
   }
 
-  const userId = `usr_${Buffer.from(email).toString('base64url').slice(0, 16)}`;
+  const encoded =
+    typeof Buffer !== 'undefined'
+      ? Buffer.from(email).toString('base64url')
+      : btoa(email).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const userId = `usr_${encoded.slice(0, 16)}`;
   const signedJwt = await sign(
     {
       sub: userId,

@@ -1,6 +1,7 @@
 name = "select-check-api"
 main = "src/index.ts"
 compatibility_date = "2025-03-01"
+compatibility_flags = ["nodejs_compat"]
 
 [vars]
 OPENAI_MODEL = "gpt-4o-mini"
@@ -9,13 +10,12 @@ AUTH_DAILY_LIMIT = "100"
 
 [[kv_namespaces]]
 binding = "QUOTA_KV"
-id = "replace-with-cloudflare-kv-id"
-preview_id = "replace-with-cloudflare-kv-preview-id"
+id = "b41b26b9843b4df99a798cb6f73805e8"
 
-[[d1_databases]]
-binding = "DB"
-database_name = "select-check-db"
-database_id = "replace-with-cloudflare-d1-id"
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "select-check-db"
+# database_id = "replace-with-cloudflare-d1-id"
 
 # Secrets to configure via `wrangler secret put`:
 # - OPENAI_API_KEY
