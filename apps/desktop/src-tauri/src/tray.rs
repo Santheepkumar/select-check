@@ -7,10 +7,11 @@ use crate::SharedState;
 
 pub fn setup_system_tray(app: &AppHandle, state: SharedState) -> Result<(), Box<dyn std::error::Error>> {
     let toggle_item = MenuItem::with_id(app, "toggle_pause", "Pause SelectCheck", true, None::<&str>)?;
+    let onboarding_item = MenuItem::with_id(app, "open_onboarding", "Setup & Hotkeys...", true, None::<&str>)?;
     let settings_item = MenuItem::with_id(app, "open_settings", "Settings & AI Engine...", true, None::<&str>)?;
     let quit_item = MenuItem::with_id(app, "quit", "Quit SelectCheck", true, None::<&str>)?;
 
-    let menu = Menu::with_items(app, &[&toggle_item, &settings_item, &quit_item])?;
+    let menu = Menu::with_items(app, &[&toggle_item, &onboarding_item, &settings_item, &quit_item])?;
 
     let icon = app
         .default_window_icon()
@@ -33,6 +34,12 @@ pub fn setup_system_tray(app: &AppHandle, state: SharedState) -> Result<(), Box<
                         "Pause SelectCheck"
                     };
                     let _ = toggle_item.set_text(label);
+                }
+            }
+            "open_onboarding" => {
+                if let Some(win) = app.get_webview_window("onboarding") {
+                    let _ = win.show();
+                    let _ = win.set_focus();
                 }
             }
             "open_settings" => {

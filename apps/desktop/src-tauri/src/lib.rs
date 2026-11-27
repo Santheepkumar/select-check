@@ -6,8 +6,12 @@ pub mod tray;
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Manager, State};
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
-use overlay::{dismiss_overlay, expand_overlay, open_settings_window};
+use overlay::{
+    close_onboarding_window, dismiss_overlay, expand_overlay, open_onboarding_window,
+    open_settings_window,
+};
 use replacer::replace_selected_text;
 use selection::start_selection_listener;
 use tray::setup_system_tray;
@@ -24,8 +28,12 @@ fn default_true() -> bool {
     true
 }
 
+fn default_false() -> bool {
+    false
+}
+
 fn default_trigger() -> String {
-    "auto_mouse".to_string()
+    "hotkey_only".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -52,12 +60,14 @@ pub struct DesktopSettings {
     pub skip_code_and_numbers: bool,
     #[serde(default = "default_trigger")]
     pub trigger_mode: String,
+    #[serde(default = "default_false")]
+    pub onboarding_completed: bool,
 }
 
 impl Default for DesktopSettings {
     fn default() -> Self {
         Self {
-            auto_show_on_select: true,
+            auto_show_on_select: false,
             auto_hide_seconds: 4,
             show_word_diff: true,
             global_shortcut: "CommandOrControl+Shift+G".to_string(),
@@ -78,7 +88,8 @@ impl Default for DesktopSettings {
             slot3_preset: "professional_polished".to_string(),
             slot3_custom_prompt: None,
             skip_code_and_numbers: true,
-            trigger_mode: "auto_mouse".to_string(),
+            trigger_mode: "hotkey_only".to_string(),
+            onboarding_completed: false,
         }
     }
 }
@@ -107,6 +118,97 @@ impl Default for AppRuntimeState {
 
 pub type SharedState = Arc<Mutex<AppRuntimeState>>;
 
+pub fn handle_global_hotkey(app: &AppHandle, _shortcut: &Shortcut) {
+    let (is_paused, skip_code_and_numbers, blocked_apps) = {
+        if let Some(state) = app.try_state::<SharedState>() {
+            if let Ok(st) = state.lock() {
+                if st.paused {
+                    return;
+                }
+                (
+                    st.paused,
+                    st.settings.skip_code_and_numbers,
+                    st.settings.blocked_apps.clone(),
+                )
+            } else {
+                return;
+            }
+        } else {
+            return;
+        }
+    };
+
+    if is_paused {
+        return;
+    }
+
+    let active_window = active_win_pos_rs::get_active_window().ok();
+    let active_app_name = active_window
+        .as_ref()
+        .map(|w| w.app_name.clone())
+        .unwrap_or_else(|| "Unknown".to_string());
+    let active_title = active_window
+        .as_ref()
+        .map(|w| w.title.clone())
+        .unwrap_or_default();
+
+    let lower_app = active_app_name.to_lowercase();
+    let lower_title = active_title.to_lowercase();
+
+    // If focused on Settings or Onboarding of SelectCheck, ignore hotkey capture
+    if (lower_app.contains("selectcheck") || lower_app.contains("select-check"))
+        && (lower_title.contains("settings") || lower_title.contains("onboarding"))
+    {
+        return;
+    }
+
+    if selection::is_app_blocked(&active_app_name, &blocked_apps) {
+        return;
+    }
+
+    let live_cursor = selection::get_live_cursor_location();
+    let (cx, cy) = if live_cursor != (0.0, 0.0) {
+        live_cursor
+    } else {
+        (400.0, 300.0)
+    };
+
+    let app_handle = app.clone();
+    let active_app = active_app_name.clone();
+
+    std::thread::spawn(move || {
+        let captured = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            selection::capture_selected_text_safely(skip_code_and_numbers)
+        }));
+
+        let text_to_emit = match captured {
+            Ok(Some(text)) => text,
+            _ => String::new(),
+        };
+
+        if let Some(state) = app_handle.try_state::<SharedState>() {
+            if let Ok(mut st) = state.lock() {
+                st.last_selected_text = text_to_emit.clone();
+                st.last_source_app = active_app.clone();
+                st.last_cursor = (cx, cy);
+                st.overlay_mode = "card".to_string();
+            }
+        }
+
+        let _ = overlay::show_card_at(&app_handle, cx, cy);
+        use tauri::Emitter;
+        let _ = app_handle.emit(
+            "hotkey-trigger-check",
+            selection::SelectionPayload {
+                text: text_to_emit,
+                app_name: active_app,
+                x: cx,
+                y: cy,
+            },
+        );
+    });
+}
+
 #[tauri::command]
 fn get_settings(state: State<'_, SharedState>) -> Result<DesktopSettings, String> {
     let st = state.lock().map_err(|_| "State lock poisoned")?;
@@ -115,11 +217,22 @@ fn get_settings(state: State<'_, SharedState>) -> Result<DesktopSettings, String
 
 #[tauri::command]
 fn save_settings(
+    app: AppHandle,
     state: State<'_, SharedState>,
     settings: DesktopSettings,
 ) -> Result<DesktopSettings, String> {
     let mut st = state.lock().map_err(|_| "State lock poisoned")?;
+    let old_shortcut = st.settings.global_shortcut.clone();
+    let new_shortcut = settings.global_shortcut.clone();
     st.settings = settings.clone();
+
+    if old_shortcut != new_shortcut && !new_shortcut.is_empty() {
+        if !old_shortcut.is_empty() {
+            let _ = app.global_shortcut().unregister(old_shortcut.as_str());
+        }
+        let _ = app.global_shortcut().register(new_shortcut.as_str());
+    }
+
     Ok(settings)
 }
 
@@ -172,12 +285,22 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(move |app, shortcut, event| {
+                    if event.state() == ShortcutState::Pressed {
+                        handle_global_hotkey(app, shortcut);
+                    }
+                })
+                .build(),
+        )
         .manage(Arc::clone(&shared_state))
         .invoke_handler(tauri::generate_handler![
             expand_overlay,
             dismiss_overlay,
             open_settings_window,
+            open_onboarding_window,
+            close_onboarding_window,
             replace_selected_text,
             get_settings,
             save_settings,
@@ -192,7 +315,29 @@ pub fn run() {
                 overlay::apply_macos_transparency(&overlay_win);
             }
             let _ = setup_system_tray(&handle, Arc::clone(&shared_state));
-            start_selection_listener(handle, Arc::clone(&shared_state));
+            start_selection_listener(handle.clone(), Arc::clone(&shared_state));
+
+            // Register initial global shortcut
+            let (initial_shortcut, needs_onboarding) = {
+                if let Ok(st) = shared_state.lock() {
+                    (
+                        st.settings.global_shortcut.clone(),
+                        !st.settings.onboarding_completed,
+                    )
+                } else {
+                    ("CommandOrControl+Shift+G".to_string(), true)
+                }
+            };
+
+            let _ = handle.global_shortcut().register(initial_shortcut.as_str());
+
+            if needs_onboarding {
+                if let Some(onboarding_win) = app.get_webview_window("onboarding") {
+                    let _ = onboarding_win.show();
+                    let _ = onboarding_win.set_focus();
+                }
+            }
+
             Ok(())
         })
         .run(tauri::generate_context!())

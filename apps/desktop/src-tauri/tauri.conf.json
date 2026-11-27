@@ -36,6 +36,16 @@
         "resizable": true,
         "visible": false,
         "center": true
+      },
+      {
+        "label": "onboarding",
+        "title": "Welcome to SelectCheck",
+        "url": "index.html?window=onboarding",
+        "width": 680,
+        "height": 640,
+        "resizable": false,
+        "visible": false,
+        "center": true
       }
     ],
     "security": {
