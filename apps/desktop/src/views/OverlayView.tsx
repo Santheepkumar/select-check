@@ -79,34 +79,54 @@ export const OverlayView: React.FC<OverlayViewProps> = ({
     onDismiss?.();
   }, [onDismiss]);
 
+  const handleCheckText = useCallback(
+    async (text: string) => {
+      if (!text.trim()) {
+        isTriggeringRef.current = false;
+        setSelectedText('');
+        setMode('card');
+        setLoading(false);
+        setResult(null);
+        setError(
+          'No text selected. Select any text or input in an app, then press your hotkey to check!'
+        );
+        return;
+      }
+
+      isTriggeringRef.current = true;
+      setSelectedText(text);
+      setMode('card');
+      setLoading(true);
+      setError(null);
+      setResult(null);
+
+      try {
+        const currentSettings = settings || (await getAppSettings());
+        setSettings(currentSettings);
+        const res = await checkGrammarWithApi(text, currentSettings);
+        setResult(res);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to check grammar');
+      } finally {
+        setLoading(false);
+        isTriggeringRef.current = false;
+      }
+    },
+    [settings]
+  );
+
   const handleBallTrigger = useCallback(async () => {
     if (isTriggeringRef.current || mode === 'card') return;
-    isTriggeringRef.current = true;
+    await handleCheckText(selectedText);
+  }, [handleCheckText, mode, selectedText]);
 
-    setMode('card');
-    setLoading(true);
-    setError(null);
-    await expandNativeOverlay();
-
-    try {
-      const currentSettings = settings || (await getAppSettings());
-      setSettings(currentSettings);
-      const res = await checkGrammarWithApi(selectedText, currentSettings);
-      setResult(res);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to check grammar');
-    } finally {
-      setLoading(false);
-      isTriggeringRef.current = false;
-    }
-  }, [mode, settings, selectedText]);
-
-  // Listen for native Tauri selection-detected, trigger-ball, and overlay-dismissed events
+  // Listen for native Tauri selection-detected, trigger-ball, hotkey-trigger-check, and overlay-dismissed events
   useEffect(() => {
     if (!isTauriEnvironment()) return;
     let unlistenFn: (() => void) | undefined;
     let unlistenDismiss: (() => void) | undefined;
     let unlistenTrigger: (() => void) | undefined;
+    let unlistenHotkey: (() => void) | undefined;
 
     import('@tauri-apps/api/event').then(({ listen }) => {
       listen<{ text: string; app_name: string }>('selection-detected', (event) => {
@@ -124,6 +144,15 @@ export const OverlayView: React.FC<OverlayViewProps> = ({
         }
       }).then((fn) => {
         unlistenFn = fn;
+      });
+
+      listen<{ text: string; app_name: string; x: number; y: number }>(
+        'hotkey-trigger-check',
+        (event) => {
+          handleCheckText(event.payload.text || '');
+        }
+      ).then((fn) => {
+        unlistenHotkey = fn;
       });
 
       listen('trigger-ball', () => {
@@ -147,8 +176,9 @@ export const OverlayView: React.FC<OverlayViewProps> = ({
       if (unlistenFn) unlistenFn();
       if (unlistenDismiss) unlistenDismiss();
       if (unlistenTrigger) unlistenTrigger();
+      if (unlistenHotkey) unlistenHotkey();
     };
-  }, [settings?.skipCodeAndNumbers, handleBallTrigger]);
+  }, [settings?.skipCodeAndNumbers, handleBallTrigger, handleCheckText]);
 
   // Auto-hide timer in ball mode
   useEffect(() => {

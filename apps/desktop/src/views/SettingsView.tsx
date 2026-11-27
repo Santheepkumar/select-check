@@ -29,7 +29,13 @@ import {
   verifyEmailOtp,
   type ProviderConnectionResult
 } from '../services/api.js';
-import { getAppSettings, isTauriEnvironment, saveAppSettings } from '../services/tauriBridge.js';
+import {
+  getAppSettings,
+  isTauriEnvironment,
+  openNativeOnboardingWindow,
+  saveAppSettings
+} from '../services/tauriBridge.js';
+import { ShortcutRecorder } from '../components/ShortcutRecorder.js';
 
 interface SettingsViewProps {
   onClose?: () => void;
@@ -691,31 +697,66 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 }
                 className="rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-xs text-white"
               >
-                <option value="auto_mouse">Auto on Mouse Select</option>
-                <option value="hotkey_only">Hotkey Only (Ctrl+Shift+G)</option>
+                <option value="hotkey_only">Hotkey Only (Recommended - Zero Clutter)</option>
+                <option value="auto_mouse">Auto on Mouse Select (Legacy)</option>
               </select>
             </div>
 
-            <div className="flex items-center justify-between border-t border-slate-800 pt-3">
-              <div>
-                <p className="text-xs font-semibold text-white">Auto-hide floating ball after</p>
-                <p className="text-[11px] text-slate-400">
-                  Dismisses the ball if you continue typing or ignore it
-                </p>
+            {/* Custom Shortcut Recorder */}
+            <div className="border-t border-slate-800 pt-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-semibold text-white">Global Activation Hotkey</p>
+                  <p className="text-[11px] text-slate-400">
+                    Press anywhere after selecting text or focusing an input
+                  </p>
+                </div>
               </div>
-              <select
-                value={settings.autoHideSeconds}
-                onChange={(e) =>
-                  updateSettings({ autoHideSeconds: Number(e.target.value) })
-                }
-                className="rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-xs text-white"
-              >
-                <option value={3}>3 seconds</option>
-                <option value={4}>4 seconds</option>
-                <option value={6}>6 seconds</option>
-                <option value={8}>8 seconds</option>
-              </select>
+              <ShortcutRecorder
+                value={settings.globalShortcut}
+                onChange={(shortcut) => updateSettings({ globalShortcut: shortcut })}
+              />
             </div>
+
+            {settings.triggerMode === 'auto_mouse' && (
+              <div className="flex items-center justify-between border-t border-slate-800 pt-3">
+                <div>
+                  <p className="text-xs font-semibold text-white">Auto-hide floating ball after</p>
+                  <p className="text-[11px] text-slate-400">
+                    Dismisses the ball if you continue typing or ignore it
+                  </p>
+                </div>
+                <select
+                  value={settings.autoHideSeconds}
+                  onChange={(e) =>
+                    updateSettings({ autoHideSeconds: Number(e.target.value) })
+                  }
+                  className="rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-xs text-white"
+                >
+                  <option value={3}>3 seconds</option>
+                  <option value={4}>4 seconds</option>
+                  <option value={6}>6 seconds</option>
+                  <option value={8}>8 seconds</option>
+                </select>
+              </div>
+            )}
+          </div>
+
+          {/* Quick Onboarding Tour launcher */}
+          <div className="flex items-center justify-between rounded-xl border border-indigo-500/30 bg-indigo-500/10 p-3.5">
+            <div>
+              <p className="text-xs font-semibold text-indigo-300">New to SelectCheck or want to reconfigure?</p>
+              <p className="text-[11px] text-indigo-200/80">
+                Launch the interactive onboarding tour to test shortcuts and system permissions.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => openNativeOnboardingWindow()}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-500"
+            >
+              Open Onboarding
+            </button>
           </div>
 
           <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
