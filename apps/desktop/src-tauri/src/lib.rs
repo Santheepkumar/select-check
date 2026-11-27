@@ -295,6 +295,15 @@ pub fn run() {
                 .build(),
         )
         .manage(Arc::clone(&shared_state))
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                let label = window.label();
+                if label == "settings" || label == "onboarding" {
+                    let _ = window.hide();
+                    api.prevent_close();
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             expand_overlay,
             dismiss_overlay,
@@ -309,6 +318,11 @@ pub fn run() {
             open_permission_settings
         ])
         .setup(move |app: &mut tauri::App| {
+            #[cfg(target_os = "macos")]
+            {
+                app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+            }
+
             let handle: AppHandle = app.handle().clone();
             if let Some(overlay_win) = app.get_webview_window("overlay") {
                 let _ = overlay_win.set_shadow(false);
