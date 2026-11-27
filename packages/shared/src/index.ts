@@ -143,10 +143,11 @@ export interface AppSettings {
   slot3CustomPrompt?: string;
   skipCodeAndNumbers: boolean;
   triggerMode: 'auto_mouse' | 'hotkey_only';
+  onboardingCompleted?: boolean;
 }
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
-  autoShowOnSelect: true,
+  autoShowOnSelect: false,
   autoHideSeconds: 4,
   showWordDiff: true,
   globalShortcut: 'CommandOrControl+Shift+G',
@@ -164,7 +165,8 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   providerType: 'hosted',
   slot3Preset: 'professional_polished',
   skipCodeAndNumbers: true,
-  triggerMode: 'auto_mouse'
+  triggerMode: 'hotkey_only',
+  onboardingCompleted: false
 };
 
 export const DEFAULT_BLOCKED_APPS = [
