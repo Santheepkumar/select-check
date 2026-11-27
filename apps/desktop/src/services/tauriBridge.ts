@@ -86,6 +86,20 @@ export async function openNativeSettingsWindow(): Promise<void> {
   }
 }
 
+export async function openNativeOnboardingWindow(): Promise<void> {
+  if (isTauriEnvironment()) {
+    const { invoke } = await import('@tauri-apps/api/core');
+    await invoke('open_onboarding_window');
+  }
+}
+
+export async function closeNativeOnboardingWindow(): Promise<void> {
+  if (isTauriEnvironment()) {
+    const { invoke } = await import('@tauri-apps/api/core');
+    await invoke('close_onboarding_window');
+  }
+}
+
 export async function replaceSelectedTextInPlace(text: string): Promise<void> {
   if (isTauriEnvironment()) {
     const { invoke } = await import('@tauri-apps/api/core');
